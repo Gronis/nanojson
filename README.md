@@ -1,0 +1,283 @@
+# nanojson
+
+A `#![no_std]`, allocation-free JSON serializer and pull-parser for Rust.
+
+nanojson is built for constrained environments: embedded systems, firmware, and any code that cannot use a heap. You supply the output buffer and the scratch space; nanojson never allocates.
+
+Enable the `std` feature (on by default) and nanojson also provides one-liner helpers that allocate for you — no buffer choices needed.
+
+## Core concepts
+
+| Concept | What it is |
+|---|---|
+| `Serializer<W>` | Serializer. You call methods (`object_begin`, `member_key`, `integer`, …) in order and it writes JSON to your `W: Write` sink. |
+| `Parser<'src, 'buf>` | Pull parser. You drive it step by step (`object_begin`, `object_member`, `number_str`, …). It never builds a tree. |
+| `Write` | Trait for output sinks. `SliceWriter` writes into a `&mut [u8]`. `SizeCounter` counts bytes without writing (useful for pre-sizing). `Vec<u8>` implements `Write` when the `std` feature is on. |
+| `Serialize` | Trait implemented by types that know how to write themselves. Primitive impls are provided. |
+| `Deserialize` | Trait implemented by types that know how to parse themselves. |
+
+## Two API tiers
+
+### `std` tier (default feature)
+
+No buffer choices. The output `String` grows as needed; the scratch buffer for parsing is auto-allocated to `src.len()` bytes (a safe upper bound).
+
+#### Serialization
+
+```rust
+// One-liner for a derived type
+let json: String = nanojson::to_string(&entity)?;
+
+// Closure form for hand-written JSON
+let json: String = nanojson::serialize_to_string(|s| {
+    s.object_begin()?;
+      s.member_key("name")?; s.string("Alice")?;
+      s.member_key("age")?;  s.integer(30)?;
+    s.object_end()
+})?;
+```
+
+#### Deserialization
+
+```rust
+// One-liner for a derived type
+let entity: Entity = nanojson::from_str(&json)?;
+let entity: Entity = nanojson::from_bytes(json.as_bytes())?;
+
+// Closure form for manual parsing
+let (x, y) = nanojson::parse_dyn(json.as_bytes(), |p| {
+    p.object_begin()?;
+    let mut x = 0i64; let mut y = 0i64;
+    while let Some(k) = p.object_member()? {
+        match k {
+            "x" => x = p.number_str()?.parse().unwrap(),
+            "y" => y = p.number_str()?.parse().unwrap(),
+            _   => {}
+        }
+    }
+    p.object_end()?;
+    Ok((x, y))
+})?;
+```
+
+---
+
+### `no_std` tier
+
+All memory on the stack. You choose `N` (output buffer size) and `STR_BUF` (string scratch size — only needs to fit the longest single field value after escape-decoding, typically 32–128 bytes).
+
+#### Serialization
+
+```rust
+// One-liner for a derived type
+let (buf, len) = nanojson::to_json::<256, _>(&entity)?;
+let json: &[u8] = &buf[..len];
+
+// Closure form
+let (buf, len) = nanojson::serialize::<256>(|s| {
+    s.object_begin()?;
+      s.member_key("name")?; s.string("Alice")?;
+      s.member_key("age")?;  s.integer(30)?;
+    s.object_end()
+})?;
+let json: &[u8] = &buf[..len];
+```
+
+#### Deserialization
+
+```rust
+// One-liner for a derived type (STR_BUF = 64)
+let entity: Entity = nanojson::from_json::<64, _>(json)?;
+
+// Low-level parser for hand-written code
+let mut str_buf = [0u8; 64];
+let mut p = Parser::new(json, &mut str_buf);
+p.object_begin()?;
+while let Some(key) = p.object_member()? {
+    // Copy key before the next call overwrites the scratch buffer.
+    match key { "x" => { ... } _ => {} }
+}
+p.object_end()?;
+```
+
+---
+
+### Size estimation
+
+```rust
+let n = nanojson::measure(|s| entity.serialize(s));
+// n is the exact byte count — use it to pick N in to_json / serialize.
+```
+
+---
+
+## Derive macros
+
+Add `nanojson-derive` as a dev-dependency and annotate your types:
+
+```rust
+use nanojson_derive::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct Vec2 {
+    x: i64,
+    y: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct Entity {
+    id: i64,
+    #[nanojson(rename = "is_active")]
+    active: bool,
+    position: Vec2,   // nested derived struct — works automatically
+    health: i64,
+}
+
+// Unit enums serialize as JSON strings:
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum Team {
+    Red,
+    Blue,
+    #[nanojson(rename = "spectator")]
+    Spectator,
+}
+
+// Struct-variant enums use externally-tagged format: {"VariantName": {...}}
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum Event {
+    Spawn { entity_id: i64, x: i64, y: i64 },
+    Death { entity_id: i64 },
+}
+```
+
+#### `std` tier roundtrip
+
+```rust
+let entity = Entity { id: 42, active: true, position: Vec2 { x: 10, y: -5 }, health: 100 };
+
+let json: String = nanojson::to_string(&entity)?;
+// {"id":42,"is_active":true,"position":{"x":10,"y":-5},"health":100}
+
+let entity2: Entity = nanojson::from_str(&json)?;
+assert_eq!(entity, entity2);
+```
+
+#### `no_std` tier roundtrip
+
+```rust
+let (buf, len) = nanojson::to_json::<256, _>(&entity)?;
+// buf[..len] contains the JSON bytes
+
+let entity2: Entity = nanojson::from_json::<64, _>(&buf[..len])?;
+assert_eq!(entity, entity2);
+```
+
+---
+
+## Pretty-printing
+
+```rust
+// Low-level — use Serializer::with_pp directly:
+let mut w = SliceWriter::new(&mut buf);
+let mut ser: Serializer<_, 16> = Serializer::with_pp(&mut w, 2); // 2-space indent
+```
+
+```json
+{
+  "name": "Alice",
+  "active": true,
+  "level": 3
+}
+```
+
+---
+
+## Error handling
+
+Serialization errors are `SerializeError<W::Error>`:
+
+| Variant | Meaning |
+|---|---|
+| `SerializeError::Write(e)` | Write error from the sink (e.g. `WriteError::BufferFull` from `SliceWriter`) |
+| `SerializeError::DepthExceeded` | Nesting exceeded the `DEPTH` const generic (default 32) |
+
+Parse errors are `ParseError { kind: ParseErrorKind, offset: usize }`. The `offset` is a byte position in the source slice.
+
+| Kind | Meaning |
+|---|---|
+| `UnexpectedToken { expected, got }` | Parser expected one token type, found another |
+| `UnexpectedEof` | Input ended before the value was complete |
+| `InvalidEscape(byte)` | Unknown `\X` escape sequence |
+| `StringBufferOverflow` | Decoded string didn't fit in the scratch buffer |
+| `InvalidUtf8` | String content is not valid UTF-8 after unescaping |
+| `UnknownField` | Key not recognised by the deserializer (via `parser.unknown_field()`) |
+| `MissingField` | A required field was absent (used by derived code) |
+
+---
+
+## Workspace layout
+
+```
+nanojson/
+├── Cargo.toml          workspace root
+├── nanojson/             core library (#![no_std], no dependencies)
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── write.rs    Write, SliceWriter, SizeCounter
+│   │   ├── serialize.rs  Serializer, SerializeError, Serialize
+│   │   ├── deserialize.rs  Parser, Deserialize
+│   │   └── error.rs
+│   ├── examples/
+│   │   ├── manual.rs     hand-written serialize + parse (both tiers)
+│   │   ├── derive.rs     derive-macro workflow (both tiers)
+│   │   ├── sensor_log.rs embedded sensor log (both tiers)
+│   │   └── recursive.rs  recursive tree + depth-limit handling
+│   └── tests/
+│       └── derive_roundtrip.rs  integration tests
+└── nanojson-derive/      proc-macro crate (no syn/quote/proc_macro2)
+```
+
+---
+
+## Benefits
+
+- **No heap.** Zero allocation from library code. You own every byte.
+- **`#![no_std]`.** Works in bare-metal firmware, bootloaders, and kernel modules.
+- **No external dependencies.** `nanojson` has none. `nanojson-derive` uses only the built-in `proc_macro` crate.
+- **Ergonomic `std` tier.** With the `std` feature (on by default), `to_string` / `from_str` / `from_bytes` eliminate buffer management entirely.
+- **Deterministic.** No dynamic dispatch, no RTTI, no surprise allocations under load.
+- **Zero-copy string parsing.** Strings without escape sequences are returned as `&'src str` slices directly into the input. Only escaped strings touch the scratch buffer.
+- **Byte-accurate errors.** `ParseError::offset` points to the exact byte where parsing failed.
+- **Lookahead.** `is_null_ahead()`, `is_object_ahead()`, etc. let you branch on the next token type without consuming it.
+- **Size estimation.** `measure` runs the full serialization logic without writing a single byte — useful for pre-allocating a buffer of exactly the right size.
+- **Derive macros without syn.** `nanojson-derive` is hand-rolled proc-macro code; it adds nothing to your compile times.
+
+---
+
+## Limitations
+
+- **No `f64` serialization or parsing built in.** The library stays pure `core`. Write floats yourself via `ser.number_raw("3.14")`, and parse the raw `&str` returned by `number_str()` using whatever float parser you have available.
+- **No `String` or `Vec` in `no_std` mode.** All string data lives in user-supplied buffers. The `std` tier handles this automatically via `from_str` / `to_string`.
+- **Scratch buffer is reused per string.** `Parser::string()` and `Parser::object_member()` both write into the same `&mut [u8]`. The returned `&str` is invalidated by the next string parse. Copy the value immediately if you need to keep it.
+- **No streaming / async.** The serializer writes synchronously to `Write`; the parser requires the entire input to be in memory at once.
+- **No `serde` compatibility.** nanojson is its own trait ecosystem. If you need serde interop, use serde.
+- **Unsigned integers above `i64::MAX`.** `Serialize` for unsigned types casts to `i64`. Values that exceed `i64::MAX` wrap. Use `ser.number_raw(...)` for full `u64` range.
+- **Nesting depth limit.** The serializer's `DEPTH` const generic (default 32) limits how deeply you can nest objects and arrays. Use `Serializer<W, 64>` directly for deeper structures.
+
+---
+
+## Running the examples
+
+```sh
+cargo run --example manual        # hand-written serialize + parse
+cargo run --example derive        # derive-macro workflow
+cargo run --example sensor_log    # embedded sensor log
+cargo run --example recursive     # recursive tree + depth limits
+```
+
+## Running the tests
+
+```sh
+cargo test                    # std feature (default)
+cargo test --no-default-features  # no_std mode
+```

@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "nanojson",
+    "nanojson-derive",
+]
+resolver = "2"
