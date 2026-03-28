@@ -433,12 +433,25 @@ impl<'src, 'buf> Parser<'src, 'buf> {
 
 /// Trait for types that can deserialize themselves from JSON using a [`Parser`].
 pub trait Deserialize<'src, 'buf>: Sized {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError>;
+    fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError>;
 }
 
 impl<'src, 'buf> Deserialize<'src, 'buf> for bool {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        parser.bool_val()
+    fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        json.bool_val()
+    }
+}
+
+impl<'src, 'buf> Deserialize<'src, 'buf> for &'buf str {
+    fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        json.string()
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'src, 'buf> Deserialize<'src, 'buf> for std::string::String {
+    fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        Ok(std::string::String::from(json.string()?))
     }
 }
 

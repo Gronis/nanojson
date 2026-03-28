@@ -14,9 +14,7 @@
 
 extern crate std;
 
-use nanojson::serialize::Serializer;
-use nanojson::deserialize::Parser;
-use nanojson::write::SliceWriter;
+use nanojson::{Serializer, Parser, SliceWriter};
 
 fn main() {
     // ----------------------------------------------------------------

@@ -22,3 +22,5 @@ pub use deserialize::{parse, from_json};
 pub use serialize::{to_string, serialize_to_string};
 #[cfg(feature = "std")]
 pub use deserialize::{from_bytes, from_str, parse_dyn};
+
+pub use nanojson_derive::{Deserialize, Serialize};

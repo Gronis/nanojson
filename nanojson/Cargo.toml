@@ -4,10 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["std"]
+default = ["std", "derive"]
 std = []
+derive = ["nanojson-derive"]
 
 [dependencies]
-
-[dev-dependencies]
-nanojson-derive = { path = "../nanojson-derive" }
+nanojson-derive = { path = "../nanojson-derive", optional = true }

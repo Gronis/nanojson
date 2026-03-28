@@ -14,9 +14,7 @@
 
 extern crate std;
 
-use nanojson::serialize::{Serialize, Serializer, SerializeError};
-use nanojson::deserialize::Parser;
-use nanojson::Write;
+use nanojson::{Serialize, Serializer, SerializeError, Write, Parser};
 
 // ---- Domain type --------------------------------------------------------
 

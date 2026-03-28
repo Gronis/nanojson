@@ -361,6 +361,13 @@ impl Serialize for &str {
     }
 }
 
+#[cfg(feature = "std")]
+impl Serialize for std::string::String {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.string(self)
+    }
+}
+
 impl<T: Serialize> Serialize for Option<T> {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
         match self {

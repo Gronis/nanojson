@@ -13,8 +13,7 @@
 
 extern crate std;
 
-use nanojson::serialize::Serialize;
-use nanojson_derive::{Serialize, Deserialize};
+use nanojson::{Serialize, Deserialize};
 
 // ---- Domain types ----
 

@@ -20,7 +20,7 @@
 
 extern crate std;
 
-use nanojson::deserialize::Parser;
+use nanojson::{Parser};
 
 // ---- Domain types (stack-allocated) ----
 
