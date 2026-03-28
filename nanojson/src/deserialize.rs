@@ -547,20 +547,6 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<
 
 // ---- Convenience free functions ----
 
-/// Parse via closure with a stack-allocated scratch buffer of `STR_BUF` bytes.
-///
-/// `STR_BUF` only needs to fit the longest single string value after
-/// escape-decoding. `T` must be a fully owned type (no borrows from the parser).
-#[inline]
-pub fn parse<const STR_BUF: usize, T>(
-    src: &[u8],
-    f: impl for<'a, 'b> FnOnce(&mut Parser<'a, 'b>) -> Result<T, ParseError>,
-) -> Result<T, ParseError> {
-    let mut buf = [0u8; STR_BUF];
-    let mut parser = Parser::new(src, &mut buf);
-    f(&mut parser)
-}
-
 /// Deserialize a `T: Deserialize` value with a stack-allocated scratch buffer of `STR_BUF` bytes.
 #[inline]
 pub fn from_json<'s, const STR_BUF: usize, T>(

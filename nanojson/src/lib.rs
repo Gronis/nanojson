@@ -16,7 +16,7 @@ pub use serialize::{Serializer, Serialize, SerializeError};
 pub use deserialize::{Parser, Deserialize};
 
 pub use serialize::{serialize, to_json, measure};
-pub use deserialize::{parse, from_json};
+pub use deserialize::{from_json};
 
 #[cfg(feature = "std")]
 pub use serialize::{to_string, serialize_to_string};

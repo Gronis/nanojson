@@ -480,13 +480,6 @@ fn test_serialize_closure_from_json() {
 }
 
 #[test]
-fn test_parse_closure() {
-    let src = br#"{"x":5,"y":-3}"#;
-    let result = nanojson::parse::<32, Point>(src, |parser| Point::deserialize(parser)).unwrap();
-    assert_eq!(result, Point { x: 5, y: -3 });
-}
-
-#[test]
 fn test_measure_matches_to_json() {
     let p = Point { x: 1, y: 2 };
     let (_, len) = nanojson::to_json::<128, _>(&p).unwrap();
