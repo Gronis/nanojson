@@ -260,19 +260,32 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
                     self.write(&bytes[start..i])?;
                 }
                 _ => {
-                    // Determine UTF-8 sequence length
                     let seq_len = utf8_char_len(ch);
-                    if seq_len == 1 {
-                        // Non-ASCII single byte (invalid UTF-8 lead) → \u00XX
-                        const HEX: &[u8] = b"0123456789abcdef";
-                        self.write(b"\\u00")?;
-                        self.write(&[HEX[(ch >> 4) as usize], HEX[(ch & 0xF) as usize]])?;
+
+                    // Fast path: clearly invalid lead or not enough bytes
+                    if seq_len == 1 || i + seq_len > bytes.len() {
+                        self.escape_byte(ch)?;
                         i += 1;
+                        continue;
+                    }
+
+                    // Validate continuation bytes: must be 10xxxxxx
+                    let mut valid = true;
+                    for j in 1..seq_len {
+                        if (bytes[i + j] & 0b1100_0000) != 0b1000_0000 {
+                            valid = false;
+                            break;
+                        }
+                    }
+
+                    if valid {
+                        // Structurally valid UTF-8 → passthrough
+                        self.write(&bytes[i..i + seq_len])?;
+                        i += seq_len;
                     } else {
-                        // Valid multi-byte UTF-8 → passthrough
-                        let end = (i + seq_len).min(bytes.len());
-                        self.write(&bytes[i..end])?;
-                        i = end;
+                        // Invalid sequence → escape first byte only
+                        self.escape_byte(ch)?;
+                        i += 1;
                     }
                 }
             }
@@ -326,9 +339,9 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
 
     /// Write a pre-formatted number string verbatim (no escaping).
     /// Use this for floats: format the number yourself and pass the bytes here.
-    pub fn number_raw(&mut self, raw: &str) -> Result<(), SerializeError<W::Error>> {
+    pub fn number_raw(&mut self, raw: &[u8]) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
-        self.write(raw.as_bytes())?;
+        self.write(raw)?;
         self.element_end();
         Ok(())
     }
@@ -388,6 +401,16 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
         self.write_closing(b"}")?;
         self.pop_scope();
         self.element_end();
+        Ok(())
+    }
+
+    fn escape_byte(&mut self, ch: u8) -> Result<(), SerializeError<W::Error>> {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        self.write(b"\\u00")?;
+        self.write(&[
+            HEX[(ch >> 4) as usize],
+            HEX[(ch & 0x0F) as usize],
+        ])?;
         Ok(())
     }
 }
@@ -507,8 +530,9 @@ fn serialize_float<W: Write>(ser: &mut Serializer<W>, v: f64) -> Result<(), Seri
         }
     }
     let _ = core::fmt::write(&mut FloatBuf(&mut buf, &mut pos), format_args!("{v}"));
-    // SAFETY: f64 Display only emits ASCII digits, '.', 'e', '+', '-'.
-    ser.number_raw(unsafe { core::str::from_utf8_unchecked(&buf[..pos]) })
+    // SAFETY: `FloatBuf::write_str` copies bytes from `&str` arguments only,
+    // so every byte written is valid UTF-8.
+    ser.number_raw(&buf[..pos])
 }
 
 impl Serialize for f32 {
@@ -725,7 +749,7 @@ pub fn stringify_manual(
     let mut ser: Serializer<_> = Serializer::new(std::vec::Vec::new());
     f(&mut ser)?;
     let vec = ser.into_writer();
-    // SAFETY: the serializer only writes valid JSON, which is always valid UTF-8.
+    // SAFETY: the serializer internal functions always write valid UTF-8.
     Ok(unsafe { std::string::String::from_utf8_unchecked(vec) })
 }
 
@@ -767,6 +791,26 @@ pub fn stringify_manual_pretty(
     let mut ser: Serializer<_> = Serializer::with_pp(std::vec::Vec::new(), indent);
     f(&mut ser)?;
     let vec = ser.into_writer();
-    // SAFETY: the serializer only writes valid JSON, which is always valid UTF-8.
+    // SAFETY: the serializer internal functions always write valid UTF-8.
     Ok(unsafe { std::string::String::from_utf8_unchecked(vec) })
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn outputs_invalid_utf8_for_malformed_sequence() {
+    let input = [0xE2, 0x28, 0xA1]; // invalid UTF-8
+
+    let mut out = [0u8; 16];
+    let mut w = super::SliceWriter::new(&mut out);
+    {
+        let mut ser = Serializer::<_, 16>::new(&mut w);
+        ser.write_string_escaped(&input).unwrap();
+    }
+
+    // This SHOULD be valid UTF-8 if escaping worked correctly
+    assert!(
+        std::str::from_utf8(&out).is_ok(),
+        "Output is not valid UTF-8: {:?}",
+        out
+    );
 }

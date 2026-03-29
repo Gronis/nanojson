@@ -270,9 +270,16 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         self.expect_token(expected)
     }
 
-    /// After a successful String token, return the decoded string as a `&str`.
-    fn current_string(&self) -> Result<&str, ParseError> {
-        let bytes = &self.str_buf[..self.str_len];
+    /// After a successful String token, return the decoded string as a `&'buf str`.
+    fn current_string(&self) -> Result<&'buf str, ParseError> {
+        // SAFETY: `str_buf` is `&'buf mut [u8]`; its allocation lives for `'buf`.
+        // A raw-pointer round-trip sheds the `&self` borrow so we can return a
+        // reference with the correct `'buf` lifetime instead of the shorter
+        // `&self` lifetime. The first `str_len` bytes were written during
+        // decode and are valid UTF-8.
+        let bytes = unsafe {
+            core::slice::from_raw_parts(self.str_buf.as_ptr(), self.str_len)
+        };
         core::str::from_utf8(bytes).map_err(|_| {
             ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8)
         })
@@ -299,13 +306,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                 self.get_and_expect(Token::String)?;
                 self.key_start = self.token_start; // capture before colon advances token_start
                 self.get_and_expect(Token::Colon)?;
-                let s = self.current_string()?;
-                // SAFETY: we need to return a &str whose lifetime is tied to
-                // `'buf` since it lives in str_buf. The borrow checker cannot
-                // see this through the method boundary, so we use a raw pointer
-                // to extend the lifetime.
-                let s: &'buf str = unsafe { core::mem::transmute(s) };
-                Ok(Some(s))
+                Ok(Some(self.current_string()?))
             }
             Token::CloseCurly => {
                 self.pos = saved_pos;
@@ -315,9 +316,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                 // First member — token_start already points at the opening `"`
                 self.key_start = self.token_start; // capture before colon advances token_start
                 self.get_and_expect(Token::Colon)?;
-                let s = self.current_string()?;
-                let s: &'buf str = unsafe { core::mem::transmute(s) };
-                Ok(Some(s))
+                Ok(Some(self.current_string()?))
             }
             _ => Err(ParseError::at(
                 self.token_start,
@@ -400,12 +399,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// It is overwritten on the next call to `string()` or `object_member()`.
     pub fn string(&mut self) -> Result<&'buf str, ParseError> {
         self.get_and_expect(Token::String)?;
-        let s = self.current_string()?;
-        // SAFETY: `str_buf` is `&'buf mut [u8]`, so the decoded string lives for
-        // `'buf`. The borrow checker cannot express this through `&mut self`, so
-        // we transmute to attach the correct lifetime.
-        let s: &'buf str = unsafe { core::mem::transmute(s) };
-        Ok(s)
+        self.current_string()
     }
 
     /// Parse a JSON number and return the raw source bytes as a `&'src str`.
@@ -556,34 +550,22 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<
 
 impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, 'buf> for [T; N] {
     fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        use core::mem::MaybeUninit;
-
         parser.array_begin()?;
 
-        // SAFETY: `[MaybeUninit<T>; N]` needs no initialisation itself.
-        let mut arr: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut arr: [Option<T>; N] = [(); N].map(|_| None);
 
-        for (i, slot) in arr.iter_mut().enumerate() {
+        for i in 0..N {
             if !parser.array_item()? {
-                // Array ended before we filled all N slots — drop what we have.
-                for prev in &mut arr[..i] { unsafe { prev.assume_init_drop(); } }
                 return Err(ParseError::at(
                     parser.error_offset(),
                     ParseErrorKind::UnexpectedToken { expected: "array item", got: "]" },
                 ));
             }
-            match T::deserialize(parser) {
-                Ok(v)  => { slot.write(v); }
-                Err(e) => {
-                    for prev in &mut arr[..i] { unsafe { prev.assume_init_drop(); } }
-                    return Err(e);
-                }
-            }
+            arr[i] = Some(T::deserialize(parser)?);
         }
 
         // Reject arrays with more items than N.
         if parser.array_item()? {
-            for slot in arr.iter_mut() { unsafe { slot.assume_init_drop(); } }
             return Err(ParseError::at(
                 parser.error_offset(),
                 ParseErrorKind::UnexpectedToken { expected: "]", got: "array item" },
@@ -591,8 +573,9 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, '
         }
         parser.array_end()?;
 
-        // SAFETY: all N slots have been written to above.
-        Ok(arr.map(|x| unsafe { x.assume_init() }))
+        // SAFETY: every element was set to `Some(...)` by the loop above.
+        // Using `unwrap_unchecked` avoids a panic branch in library code.
+        Ok(arr.map(|x| unsafe { x.unwrap_unchecked() }))
     }
 }
 

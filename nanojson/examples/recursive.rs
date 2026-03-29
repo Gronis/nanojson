@@ -167,6 +167,7 @@ fn main() {
             Serializer::new(std::vec::Vec::new());
         write_tree(&deep, &mut ser).unwrap();
         let vec = ser.into_writer();
+        // SAFETY: the serializer only writes ASCII JSON tokens (all valid UTF-8).
         let json = unsafe { std::string::String::from_utf8_unchecked(vec) };
         std::println!("\nDeep tree (50 levels) with DEPTH=64: {} bytes serialized.", json.len());
     }

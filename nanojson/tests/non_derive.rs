@@ -83,11 +83,11 @@ fn test_all_integer_types() {
 
 #[test]
 fn test_number_raw() {
-    assert_eq!(ser!(|j| j.number_raw("3.14")),   "3.14");
-    assert_eq!(ser!(|j| j.number_raw("-0.5")),   "-0.5");
-    assert_eq!(ser!(|j| j.number_raw("1e10")),   "1e10");
-    assert_eq!(ser!(|j| j.number_raw("1.5e-3")), "1.5e-3");
-    assert_eq!(ser!(|j| j.number_raw("0")),       "0");
+    assert_eq!(ser!(|j| j.number_raw("3.14".as_bytes())),   "3.14");
+    assert_eq!(ser!(|j| j.number_raw("-0.5".as_bytes())),   "-0.5");
+    assert_eq!(ser!(|j| j.number_raw("1e10".as_bytes())),   "1e10");
+    assert_eq!(ser!(|j| j.number_raw("1.5e-3".as_bytes())), "1.5e-3");
+    assert_eq!(ser!(|j| j.number_raw("0".as_bytes())),       "0");
 }
 
 // ============================================================
