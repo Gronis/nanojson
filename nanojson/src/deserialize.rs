@@ -550,10 +550,7 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<
 pub fn parse_manual_sized<'s, const STR_BUF: usize, T>(
     src: &[u8],
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a, 'b>) -> Result<T, ParseError>,
-) -> Result<T, ParseError>
-where
-    T: for<'b> Deserialize<'s, 'b>,
-{
+) -> Result<T, ParseError> {
     let mut scratch = [0u8; STR_BUF];
     let mut parser = Parser::new(src, scratch.as_mut_slice());
     f(&mut parser)
