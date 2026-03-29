@@ -194,7 +194,8 @@ fn main() {
     std::println!("\n=== no_std tier ===");
 
     // Build the log into a 512-byte stack buffer.
-    let (log_buf, log_len) = nanojson::stringify_manual_sized::<512>(|json| {
+    let mut buf = [0; 512];
+    let log = nanojson::stringify_manual_sized(&mut buf, |json| {
         json.array_begin()?;
 
         json.object_begin()?;
@@ -223,8 +224,7 @@ fn main() {
     })
     .unwrap();
 
-    let log = &log_buf[..log_len];
-    std::println!("Log JSON ({log_len} bytes):\n{}\n", core::str::from_utf8(log).unwrap());
+    std::println!("Log JSON ({} bytes):\n{}\n", log.len(), core::str::from_utf8(log).unwrap());
 
     // Parse the log. str_buf = 32 bytes is enough for any single field value.
     let mut records: [Option<Record>; 8] = [const { None }; 8];

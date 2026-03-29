@@ -497,29 +497,32 @@ fn test_unknown_field_in_nested_error() {
 #[test]
 fn test_stringify_sized_roundtrip() {
     let p = Point { x: 3, y: -7 };
-    let (buf, len) = nanojson::stringify_sized::<128, _>(&p).unwrap();
-    let p2: Point = nanojson::parse_sized::<64, _>(&buf[..len]).unwrap();
+    let mut buf = [0; 128];
+    let json = nanojson::stringify_sized(&mut buf, &p).unwrap();
+    let p2: Point = nanojson::parse_sized(json, &mut [0; 64]).unwrap();
     assert_eq!(p, p2);
 }
 
 #[test]
 fn test_stringify_manual_sized() {
-    let (buf, len) = nanojson::stringify_manual_sized::<64>(|s| {
+    let mut buf = [0; 64];
+    let json = nanojson::stringify_manual_sized(&mut buf, |s| {
         s.object_begin()?;
         s.member_key("x")?; s.integer(10)?;
         s.member_key("y")?; s.integer(20)?;
         s.object_end()
     }).unwrap();
-    let p: Point = nanojson::parse_sized::<32, _>(&buf[..len]).unwrap();
+    let p: Point = nanojson::parse_sized(json, &mut [0; 32]).unwrap();
     assert_eq!(p, Point { x: 10, y: 20 });
 }
 
 #[test]
 fn test_measure_matches_stringify_sized() {
     let p = Point { x: 1, y: 2 };
-    let (_, len) = nanojson::stringify_sized::<128, _>(&p).unwrap();
+    let mut buf = [0; 128];
+    let json = nanojson::stringify_sized(&mut buf, &p).unwrap();
     let measured = nanojson::measure(|s| p.serialize(s));
-    assert_eq!(measured, len);
+    assert_eq!(measured, json.len());
 }
 
 #[test]
@@ -537,8 +540,9 @@ fn test_measure_closure() {
 #[test]
 fn test_stringify_sized_nested() {
     let person = Person { age: 30, active: true, address: Address { street_num: 1, zip: 99 } };
-    let (buf, len) = nanojson::stringify_sized::<256, _>(&person).unwrap();
-    let person2: Person = nanojson::parse_sized::<64, _>(&buf[..len]).unwrap();
+    let mut buf = [0; 256];
+    let json = nanojson::stringify_sized(&mut buf, &person).unwrap();
+    let person2: Person = nanojson::parse_sized(json, &mut [0; 64]).unwrap();
     assert_eq!(person, person2);
 }
 
@@ -589,7 +593,7 @@ fn test_parse_manual_closure() {
 #[test]
 fn test_parse_manual_sized_closure() {
     let src = br#"{"x":3,"y":4}"#;
-    let p = nanojson::parse_manual_sized::<256, Point>(src, |parser, buf| Point::deserialize(parser, buf)).unwrap();
+    let p = nanojson::parse_manual_sized::<Point>(src, &mut [0; 256], |parser, buf| Point::deserialize(parser, buf)).unwrap();
     assert_eq!(p, Point { x: 3, y: 4 });
 }
 

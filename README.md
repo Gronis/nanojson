@@ -61,7 +61,6 @@ enum Event {
 let entity = Entity { id: 42, active: true, position: Vec2 { x: 10, y: -5 }, health: 100 };
 
 let json: String = nanojson::stringify(&entity)?;
-// {"id":42,"is_active":true,"position":{"x":10,"y":-5},"health":100}
 
 let entity2: Entity = nanojson::parse(&json)?;
 assert_eq!(entity, entity2);
@@ -70,10 +69,11 @@ assert_eq!(entity, entity2);
 #### `no_std` tier roundtrip
 
 ```rust
-let (buf, len) = nanojson::stringify_sized::<256, _>(&entity)?;
-// buf[..len] contains the JSON bytes
+let mut buf = [0; 256];
+let json = nanojson::stringify_sized(&mut buf, &entity)?;
 
-let entity2: Entity = nanojson::parse_sized::<64, _>(&buf[..len])?;
+let mut buf = [0; 64];
+let entity2: Entity = nanojson::parse_sized(&mut buf, json)?;
 assert_eq!(entity, entity2);
 ```
 
@@ -158,28 +158,27 @@ All memory on the stack. You choose `N` (output buffer size) and `STR_BUF` (stri
 
 ```rust
 // One-liner for a derived type
-let (buf, len) = nanojson::stringify_sized::<256, _>(&entity)?;
-let json: &[u8] = &buf[..len];
+let mut buf = [0; 256];
+let json = nanojson::stringify_sized(&mut buf, &entity)?;
 
 // Closure form
-let (buf, len) = nanojson::stringify_manual_sized::<256>(|s| {
+let json = nanojson::stringify_manual_sized(&mut buf, |s| {
     s.object_begin()?;
       s.member_key("name")?; s.string("Alice")?;
       s.member_key("age")?;  s.integer(30)?;
     s.object_end()
 })?;
-let json: &[u8] = &buf[..len];
 ```
 
 #### Deserialization
 
 ```rust
 // One-liner for a derived type (STR_BUF = 64)
-let entity: Entity = nanojson::parse_sized::<64, _>(json)?;
+let entity: Entity = nanojson::parse_sized(&json, &mut [0; 64])?;
 
 // Low-level parser for hand-written code
 let json = r#"{"x": 3, "y": 4}"#.as_bytes();
-let (x, y) = nanojson::parse_manual_sized::<64, _>(json, |p, buf| {
+let (x, y) = nanojson::parse_manual_sized(json, &mut [0; 64], |p, buf| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
     while let Some(k) = p.object_member(buf)? {
@@ -215,8 +214,9 @@ let json = nanojson::stringify_pretty(&entity, 2)?;
 let json = nanojson::stringify_manual_pretty(2, |s| { ... })?;
 
 // no_std tier
-let (buf, len) = nanojson::stringify_sized_pretty::<256, _>(&entity, 2)?;
-let (buf, len) = nanojson::stringify_manual_sized_pretty::<256>(2, |s| { ... })?;
+let mut buf = [0; 256];
+let json = nanojson::stringify_sized_pretty(&mut buf, &entity, 2)?;
+let json = nanojson::stringify_manual_sized_pretty(&mut buf, 2, |s| { ... })?;
 ```
 
 ```json

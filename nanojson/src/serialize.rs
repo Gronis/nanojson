@@ -616,61 +616,65 @@ impl Serialize for () {
 ///
 /// # Example
 /// ```
-/// let (buf, len) = nanojson::stringify_manual_sized::<32>(|s| {
+/// let mut buf = [0u8; 32];
+/// let json = nanojson::stringify_manual_sized(&mut buf, |s| {
 ///     s.object_begin()?;
 ///     s.member_key("n")?; s.integer(7)?;
 ///     s.object_end()
 /// }).unwrap();
-/// assert_eq!(&buf[..len], b"{\"n\":7}");
+/// assert_eq!(json, b"{\"n\":7}");
 /// ```
 #[inline]
-pub fn stringify_manual_sized<const N: usize>(
+pub fn stringify_manual_sized<'buf>(
+    buf: &'buf mut [u8],
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
-) -> Result<([u8; N], usize), SerializeError<WriteError>> {
-    let mut buf = [0u8; N];
-    let mut w = crate::write::SliceWriter::new(&mut buf);
+) -> Result<&'buf mut [u8], SerializeError<WriteError>> {
+    let mut w = crate::write::SliceWriter::new(buf);
     let mut ser = Serializer::new(&mut w);
     f(&mut ser)?;
     let len = w.pos();
-    Ok((buf, len))
+    Ok(&mut buf[..len])
 }
 
 /// Serialize a `T: Serialize` value into a stack-allocated `[u8; N]` buffer.
 ///
 /// # Example
 /// ```
-/// let (buf, len) = nanojson::stringify_sized::<32, _>(&42i64).unwrap();
-/// assert_eq!(&buf[..len], b"42");
+/// let mut buf = [0u8; 32];
+/// let json = nanojson::stringify_sized(&mut buf, &42i64).unwrap();
+/// assert_eq!(json, b"42");
 /// ```
 #[inline]
-pub fn stringify_sized<const N: usize, T: Serialize>(
+pub fn stringify_sized<'buf, T: Serialize>(
+    buf: &'buf mut [u8],
     val: &T,
-) -> Result<([u8; N], usize), SerializeError<WriteError>> {
-    stringify_manual_sized::<N>(|s| val.serialize(s))
+) -> Result<&'buf mut [u8], SerializeError<WriteError>> {
+    stringify_manual_sized(buf, |s| val.serialize(s))
 }
 
 /// Serialize via closure into a stack-allocated `[u8; N]` buffer with pretty-printing.
 ///
 /// # Example
 /// ```
-/// let (buf, len) = nanojson::stringify_manual_sized_pretty::<64>(2, |s| {
+/// let mut buf = [0u8; 64];
+/// let json = nanojson::stringify_manual_sized_pretty(&mut buf, 2, |s| {
 ///     s.object_begin()?;
 ///     s.member_key("x")?; s.integer(1)?;
 ///     s.object_end()
 /// }).unwrap();
-/// assert_eq!(&buf[..len], b"{\n  \"x\": 1\n}");
+/// assert_eq!(json, b"{\n  \"x\": 1\n}");
 /// ```
 #[inline]
-pub fn stringify_manual_sized_pretty<const N: usize>(
+pub fn stringify_manual_sized_pretty<'buf>(
+    buf: &'buf mut [u8],
     indent: usize,
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
-) -> Result<([u8; N], usize), SerializeError<WriteError>> {
-    let mut buf = [0u8; N];
-    let mut w = crate::write::SliceWriter::new(&mut buf);
+) -> Result<&'buf mut [u8], SerializeError<WriteError>> {
+    let mut w = crate::write::SliceWriter::new(buf);
     let mut ser = Serializer::with_pp(&mut w, indent);
     f(&mut ser)?;
     let len = w.pos();
-    Ok((buf, len))
+    Ok(&mut buf[..len])
 }
 
 /// Serialize a `T: Serialize` value into a stack-allocated `[u8; N]` buffer with pretty-printing.
@@ -681,16 +685,18 @@ pub fn stringify_manual_sized_pretty<const N: usize>(
 /// # #[cfg(feature = "derive")] {
 /// #[derive(nanojson::Serialize)]
 /// struct Point { x: i64, y: i64 }
-/// let (buf, len) = nanojson::stringify_sized_pretty::<64, _>(&Point { x: 1, y: 2 }, 2).unwrap();
-/// assert_eq!(&buf[..len], b"{\n  \"x\": 1,\n  \"y\": 2\n}");
+/// let mut buf = [0u8; 64];
+/// let json = nanojson::stringify_sized_pretty(&mut buf, 2, &Point { x: 1, y: 2 }).unwrap();
+/// assert_eq!(json, b"{\n  \"x\": 1,\n  \"y\": 2\n}");
 /// # }
 /// ```
 #[inline]
-pub fn stringify_sized_pretty<const N: usize, T: Serialize>(
-    val: &T,
+pub fn stringify_sized_pretty<'buf, T: Serialize>(
+    buf: &'buf mut [u8],
     indent: usize,
-) -> Result<([u8; N], usize), SerializeError<WriteError>> {
-    stringify_manual_sized_pretty::<N>(indent, |s| val.serialize(s))
+    val: &T,
+) -> Result<&'buf mut [u8], SerializeError<WriteError>> {
+    stringify_manual_sized_pretty(buf, indent, |s| val.serialize(s))
 }
 
 /// Count the bytes that a closure would produce without writing anything.
@@ -817,6 +823,7 @@ fn outputs_invalid_utf8_for_malformed_sequence() {
 #[test]
 fn escapes_vertical_tab_as_unicode() {
     // \v (0x0B) is not a valid JSON escape; must be emitted as \u000b.
-    let (json, len) = stringify_manual_sized::<16>(|s| s.string_bytes(&[0x0B])).unwrap();
-    assert_eq!(&json[..len], r#""\u000b""#.as_bytes());
+    let mut out = [0u8; 16];
+    let json = stringify_manual_sized(&mut out, |s| s.string_bytes(&[0x0B])).unwrap();
+    assert_eq!(&json[..], r#""\u000b""#.as_bytes());
 }

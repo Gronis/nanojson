@@ -75,10 +75,11 @@ fn main() {
     //                     only needs to fit the longest single field value.
     // ----------------------------------------------------------------
 
-    let (buf, len) = nanojson::stringify_sized::<256, _>(&entity).unwrap();
-    std::println!("\nEntity JSON (no_std, {len} bytes): {}", core::str::from_utf8(&buf[..len]).unwrap());
+    let mut buf = [0; 256];
+    let json = nanojson::stringify_sized(&mut buf, &entity).unwrap();
+    std::println!("\nEntity JSON (no_std, {} bytes): {}", json.len(), core::str::from_utf8(json).unwrap());
 
-    let entity3: Entity = nanojson::parse_sized::<64, _>(&buf[..len]).unwrap();
+    let entity3: Entity = nanojson::parse_sized(json, &mut [0; 64]).unwrap();
     std::println!("Decoded (no_std):  {:?}", entity3);
     assert_eq!(entity, entity3);
 
@@ -93,9 +94,10 @@ fn main() {
     let team2: Team = nanojson::parse(&json).unwrap();
     assert_eq!(team, team2);
 
-    let (buf, len) = nanojson::stringify_sized::<16, _>(&team).unwrap();
-    std::println!("Team JSON (no_std): {}", core::str::from_utf8(&buf[..len]).unwrap());
-    let team3: Team = nanojson::parse_sized::<16, _>(&buf[..len]).unwrap();
+    let mut buf = [0; 16];
+    let json = nanojson::stringify_sized(&mut buf, &team).unwrap();
+    std::println!("Team JSON (no_std): {}", core::str::from_utf8(json).unwrap());
+    let team3: Team = nanojson::parse_sized(json, &mut [0; 16]).unwrap();
     assert_eq!(team, team3);
 
     // ----------------------------------------------------------------
@@ -115,9 +117,10 @@ fn main() {
         assert_eq!(*ev, ev2);
 
         // no_std
-        let (buf, len) = nanojson::stringify_sized::<128, _>(ev).unwrap();
-        std::println!("Event JSON (no_std): {}", core::str::from_utf8(&buf[..len]).unwrap());
-        let ev3: Event = nanojson::parse_sized::<32, _>(&buf[..len]).unwrap();
+        let mut buf = [0; 128];
+        let json = nanojson::stringify_sized(&mut buf, ev).unwrap();
+        std::println!("Event JSON (no_std): {}", core::str::from_utf8(json).unwrap());
+        let ev3: Event = nanojson::parse_sized(json, &mut [0; 32]).unwrap();
         assert_eq!(*ev, ev3);
     }
 

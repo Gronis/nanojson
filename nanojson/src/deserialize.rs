@@ -707,7 +707,7 @@ impl_deserialize_map!(
 ///
 /// # Example
 /// ```
-/// let (x, y) = nanojson::parse_manual_sized::<16, _>(b"{\"x\":3,\"y\":4}", |p, buf| {
+/// let (x, y) = nanojson::parse_manual_sized(b"{\"x\":3,\"y\":4}", &mut [0u8; 16], |p, buf| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
 ///     while let Some(k) = p.object_member(buf)? {
@@ -722,31 +722,31 @@ impl_deserialize_map!(
 /// }).unwrap();
 /// assert_eq!((x, y), (3, 4));
 /// ```
-pub fn parse_manual_sized<const STR_BUF: usize, T>(
+pub fn parse_manual_sized<T>(
     src: &[u8],
+    buf: &mut [u8],
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a>, &'b mut [u8]) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {
-    let mut scratch = [0u8; STR_BUF];
     let mut parser = Parser::new(src);
-    f(&mut parser, &mut scratch)
+    f(&mut parser, buf)
 }
 
 /// Deserialize a `T: Deserialize` value with a stack-allocated scratch buffer of `STR_BUF` bytes.
 ///
 /// # Example
 /// ```
-/// let n: i64 = nanojson::parse_sized::<8, _>(b"42").unwrap();
+/// let n: i64 = nanojson::parse_sized(b"42", &mut [0; 0]).unwrap();
 /// assert_eq!(n, 42);
 /// ```
 #[inline]
-pub fn parse_sized<'s, const STR_BUF: usize, T>(
+pub fn parse_sized<'s, T>(
     src: &'s [u8],
+    buf: &mut [u8],
 ) -> Result<T, ParseError>
 where
     T: for<'b> Deserialize<'s, 'b>,
 {
-    let mut buf = [0u8; STR_BUF];
-    T::deserialize(&mut Parser::new(src), &mut buf)
+    T::deserialize(&mut Parser::new(src), buf)
 }
 
 /// Deserialize a fully-owned type from raw bytes.
