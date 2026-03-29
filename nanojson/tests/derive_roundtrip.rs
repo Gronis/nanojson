@@ -50,6 +50,18 @@ struct MaybePoint {
     y: Option<i64>,
 }
 
+// Struct with #[nanojson(default)] fields.
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct WithDefaults {
+    required: i64,
+    #[nanojson(default)]
+    count: i64,
+    #[nanojson(default)]
+    label: ::std::string::String,
+    #[nanojson(rename = "is_active", default)]
+    active: bool,
+}
+
 // Unit enum — serialized as a JSON string.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 enum Direction {
@@ -696,4 +708,60 @@ fn test_sensor_false_roundtrip() {
 fn test_renamed_negative_roundtrip() {
     let r = Renamed { value: -9999 };
     assert_eq!(r, roundtrip(&r));
+}
+
+// ============================================================
+// ---- #[nanojson(default)] tests ----
+// ============================================================
+
+fn parse_with_defaults(json: &str) -> WithDefaults {
+    nanojson::parse(json).expect("parse failed")
+}
+
+#[test]
+fn test_default_all_absent() {
+    // Only the required field is present; the three defaulted fields are absent.
+    let v = parse_with_defaults(r#"{"required": 7}"#);
+    assert_eq!(v, WithDefaults { required: 7, count: 0, label: String::new(), active: false });
+}
+
+#[test]
+fn test_default_fields_present() {
+    // All fields supplied — values should be taken from JSON, not defaults.
+    let v = parse_with_defaults(r#"{"required": 1, "count": 42, "label": "hello", "is_active": true}"#);
+    assert_eq!(v, WithDefaults { required: 1, count: 42, label: "hello".to_owned(), active: true });
+}
+
+#[test]
+fn test_default_partial() {
+    // Mix: one default field present, others absent.
+    let v = parse_with_defaults(r#"{"required": 5, "count": 99}"#);
+    assert_eq!(v, WithDefaults { required: 5, count: 99, label: String::new(), active: false });
+}
+
+#[test]
+fn test_default_with_rename() {
+    // The `active` field is renamed to `is_active` and also has default.
+    // Verify rename still works when the field is present.
+    let v = parse_with_defaults(r#"{"required": 0, "is_active": true}"#);
+    assert!(v.active);
+    // Verify the original Rust name is not accepted as a JSON key.
+    let result: Result<WithDefaults, _> = nanojson::parse(r#"{"required": 0, "active": true}"#);
+    assert!(result.is_err()); // "active" is unknown; only "is_active" is valid
+}
+
+#[test]
+fn test_default_required_still_required() {
+    // The `required` field has no default — omitting it must still error.
+    let result: Result<WithDefaults, _> = nanojson::parse(r#"{"count": 1}"#);
+    assert!(matches!(
+        result,
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField { .. }, .. })
+    ));
+}
+
+#[test]
+fn test_default_roundtrip() {
+    let v = WithDefaults { required: 3, count: 10, label: "x".to_owned(), active: true };
+    assert_eq!(v, roundtrip(&v));
 }

@@ -217,12 +217,18 @@ fn gen_deserialize_struct(name: &str, fields: &[ParsedField]) -> Result<String, 
     for f in fields {
         let fname = &f.name;
         let jname = escape_rust_str(&f.json_name);
-        code.push_str(&format!(
-            "{fname}: {fname}.ok_or_else(|| ::nanojson::ParseError {{ \
-                kind: ::nanojson::ParseErrorKind::MissingField {{ field: {jname} }}, \
-                offset: __json.error_offset() \
-            }})?,"
-        ));
+        if f.has_default {
+            code.push_str(&format!(
+                "{fname}: {fname}.unwrap_or(::core::default::Default::default()),"
+            ));
+        } else {
+            code.push_str(&format!(
+                "{fname}: {fname}.ok_or_else(|| ::nanojson::ParseError {{ \
+                    kind: ::nanojson::ParseErrorKind::MissingField {{ field: {jname} }}, \
+                    offset: __json.error_offset() \
+                }})?,"
+            ));
+        }
     }
     code.push_str("})"); // Ok(Name { ... })
 
@@ -328,12 +334,18 @@ fn gen_deserialize_struct_variant(
     for f in fields {
         let fname = &f.name;
         let jname = escape_rust_str(&f.json_name);
-        code.push_str(&format!(
-            "{fname}: {fname}.ok_or_else(|| ::nanojson::ParseError {{ \
-                kind: ::nanojson::ParseErrorKind::MissingField {{ field: {jname} }}, \
-                offset: __json.error_offset() \
-            }})?,"
-        ));
+        if f.has_default {
+            code.push_str(&format!(
+                "{fname}: {fname}.unwrap_or(::core::default::Default::default()),"
+            ));
+        } else {
+            code.push_str(&format!(
+                "{fname}: {fname}.ok_or_else(|| ::nanojson::ParseError {{ \
+                    kind: ::nanojson::ParseErrorKind::MissingField {{ field: {jname} }}, \
+                    offset: __json.error_offset() \
+                }})?,"
+            ));
+        }
     }
     code.push_str("}");
     Ok(code)

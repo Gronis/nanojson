@@ -25,6 +25,9 @@ pub(crate) struct ParsedField {
     pub ty: Vec<TokenTree>,
     /// JSON key name (from `#[nanojson(rename = "...")]` or the field ident).
     pub json_name: String,
+    /// If `#[nanojson(default)]` is present, use `Default::default()` when the
+    /// field is absent from JSON instead of returning `MissingField`.
+    pub has_default: bool,
 }
 
 pub(crate) struct ParsedVariant {
@@ -72,17 +75,6 @@ impl Tokens {
             Some(other) => compiler_error!(other, "expected identifier, got `{other}`"),
             None => compiler_error!("unexpected end of input, expected identifier"),
         }
-    }
-
-    /// Skip an ident if it matches; return whether it was skipped.
-    fn skip_ident(&mut self, name: &str) -> bool {
-        if let Some(TokenTree::Ident(i)) = self.peek() {
-            if i.to_string() == name {
-                self.pos += 1;
-                return true;
-            }
-        }
-        false
     }
 
     fn skip_visibility(&mut self) {
@@ -154,8 +146,14 @@ impl Tokens {
 
 // ---- Attribute parsing ----
 
-/// Returns the JSON rename if `#[nanojson(rename = "...")]` is present in the attribute list.
-fn parse_attrs(attrs: &[TokenTree]) -> Result<Option<String>, TokenStream> {
+struct FieldAttrs {
+    rename: Option<String>,
+    has_default: bool,
+}
+
+/// Accumulates `#[nanojson(...)]` attributes from a field's attribute list.
+fn parse_attrs(attrs: &[TokenTree]) -> Result<FieldAttrs, TokenStream> {
+    let mut result = FieldAttrs { rename: None, has_default: false };
     let mut i = 0;
     while i < attrs.len() {
         // Look for `# [ ... ]`
@@ -165,63 +163,67 @@ fn parse_attrs(attrs: &[TokenTree]) -> Result<Option<String>, TokenStream> {
                 if i >= attrs.len() { break; }
                 if let TokenTree::Group(g) = &attrs[i] {
                     if g.delimiter() == Delimiter::Bracket {
-                        if let Some(rename) = parse_nanojson_attr(g.stream())? {
-                            return Ok(Some(rename));
-                        }
+                        parse_nanojson_attr(g.stream(), &mut result)?;
                     }
                 }
             }
         }
         i += 1;
     }
-    Ok(None)
+    Ok(result)
 }
 
-/// Parse the inside of `#[nanojson(...)]`, return rename value if present.
-fn parse_nanojson_attr(ts: TokenStream) -> Result<Option<String>, TokenStream> {
+/// Parse the inside of `#[nanojson(...)]` and merge results into `out`.
+fn parse_nanojson_attr(ts: TokenStream, out: &mut FieldAttrs) -> Result<(), TokenStream> {
     let mut toks = Tokens::new(ts);
     // First ident must be "nanojson"
     match toks.peek() {
         Some(TokenTree::Ident(i)) if i.to_string() == "nanojson" => { toks.next(); }
-        _ => return Ok(None), // not our attribute
+        _ => return Ok(()), // not our attribute
     }
     // Expect `(...)`
     match toks.next() {
         Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis => {
             let mut inner = Tokens::new(g.stream());
-            // parse `rename = "value"`
             while inner.peek().is_some() {
                 let key = inner.next_ident()?;
                 let key_str = key.to_string();
-                // consume `=`
-                match inner.next() {
-                    Some(TokenTree::Punct(p)) if p.as_char() == '=' => {}
-                    Some(other) => return compiler_error!(other, "expected `=` after `{key_str}`"),
-                    None => return compiler_error!("expected `=` after `{key_str}`"),
-                }
-                let value = match inner.next() {
-                    Some(TokenTree::Literal(lit)) => {
-                        let s = lit.to_string();
-                        // strip surrounding quotes
-                        if s.starts_with('"') && s.ends_with('"') {
-                            s[1..s.len()-1].to_string()
-                        } else {
-                            return compiler_error!(lit, "expected string literal for `{key_str}`");
-                        }
+                match key_str.as_str() {
+                    "default" => {
+                        out.has_default = true;
                     }
-                    Some(other) => return compiler_error!(other, "expected string literal for `{key_str}`"),
-                    None => return compiler_error!("expected string literal for `{key_str}`"),
-                };
-                if key_str == "rename" {
-                    return Ok(Some(value));
+                    "rename" => {
+                        // consume `=`
+                        match inner.next() {
+                            Some(TokenTree::Punct(p)) if p.as_char() == '=' => {}
+                            Some(other) => return compiler_error!(other, "expected `=` after `rename`"),
+                            None => return compiler_error!("expected `=` after `rename`"),
+                        }
+                        let value = match inner.next() {
+                            Some(TokenTree::Literal(lit)) => {
+                                let s = lit.to_string();
+                                if s.starts_with('"') && s.ends_with('"') {
+                                    s[1..s.len()-1].to_string()
+                                } else {
+                                    return compiler_error!(lit, "expected string literal for `rename`");
+                                }
+                            }
+                            Some(other) => return compiler_error!(other, "expected string literal for `rename`"),
+                            None => return compiler_error!("expected string literal for `rename`"),
+                        };
+                        out.rename = Some(value);
+                    }
+                    other => return compiler_error!(key, "unknown nanojson attribute `{other}`"),
                 }
-                // skip comma between options
-                inner.skip_ident(",");
+                // skip optional comma between attributes
+                if let Some(TokenTree::Punct(p)) = inner.peek() {
+                    if p.as_char() == ',' { inner.next(); }
+                }
             }
-            Ok(None)
+            Ok(())
         }
         Some(other) => compiler_error!(other, "expected `(...)` after `nanojson`"),
-        None => Ok(None),
+        None => Ok(()),
     }
 }
 
@@ -268,12 +270,12 @@ fn parse_named_fields(group: Group) -> Result<Vec<ParsedField>, TokenStream> {
         // Type tokens (up to `,`)
         let ty = toks.collect_until_comma();
 
-        let json_name = match parse_attrs(&attrs)? {
-            Some(rename) => rename,
-            None => name_str.clone(),
+        let (json_name, has_default) = match parse_attrs(&attrs) {
+            Ok(attrs) => (attrs.rename.unwrap_or(name_str.clone()), attrs.has_default),
+            Err(tt) => return Err(tt),
         };
 
-        fields.push(ParsedField { name: name_str, name_span, ty, json_name });
+        fields.push(ParsedField { name: name_str, name_span, ty, json_name, has_default });
     }
 
     Ok(fields)
@@ -333,7 +335,7 @@ fn parse_variants(group: Group) -> Result<Vec<ParsedVariant>, TokenStream> {
             if p.as_char() == ',' { toks.next(); }
         }
 
-        let json_name = match parse_attrs(&attrs)? {
+        let json_name = match parse_attrs(&attrs)?.rename  {
             Some(rename) => rename,
             None => name_str.clone(),
         };
