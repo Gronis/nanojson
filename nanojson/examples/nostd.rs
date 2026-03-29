@@ -2,7 +2,7 @@
 
 use nanojson::{Deserialize, ParseError, ParseErrorKind, Parser, Serialize, SerializeError, Serializer, Write};
 
-struct StringBuf<const N: usize> {
+struct StringArray<const N: usize> {
     buf: [u8; N],
     len: usize,
 }
@@ -10,7 +10,7 @@ struct StringBuf<const N: usize> {
 #[derive(Serialize, Deserialize, Debug)]
 struct MyStruct {
     num: i32,
-    name: StringBuf<32>,
+    name: StringArray<32>,
 }
 
 fn main() {
@@ -22,7 +22,7 @@ fn main() {
         // Change the fields and turn back into a JSON string again
         let my_struct2 = MyStruct {
             num: 420,
-            name: StringBuf::try_from("world").unwrap(),
+            name: StringArray::try_from("world").unwrap(),
         };
 
         if let Ok(json) = nanojson::stringify(&my_struct2) {
@@ -33,7 +33,7 @@ fn main() {
     }
 }
 
-impl<const N: usize> TryFrom<&str> for StringBuf<N> {
+impl<const N: usize> TryFrom<&str> for StringArray<N> {
     type Error = &'static str;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         let mut buf = [0; N];
@@ -41,23 +41,23 @@ impl<const N: usize> TryFrom<&str> for StringBuf<N> {
             return Err("String too large")
         }
         buf[..s.len()].copy_from_slice(s.as_bytes());
-        Ok(StringBuf { buf, len: s.len() })
+        Ok(StringArray { buf, len: s.len() })
     }
 }
 
-impl<const N: usize> core::fmt::Debug for StringBuf<N> {
+impl<const N: usize> core::fmt::Debug for StringArray<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(core::str::from_utf8(&self.buf[..self.len]).unwrap())
     }
 }
 
-impl<const N: usize> Serialize for StringBuf<N> {
+impl<const N: usize> Serialize for StringArray<N> {
     fn serialize<W: Write>(&self, json: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
         json.string_bytes(&self.buf[..self.len])
     }
 }
 
-impl<'src, 'buf, const N: usize> Deserialize<'src, 'buf> for StringBuf<N> {
+impl<'src, 'buf, const N: usize> Deserialize<'src, 'buf> for StringArray<N> {
     fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
         let s = json.string()?;
         if s.len() > N {
@@ -66,6 +66,6 @@ impl<'src, 'buf, const N: usize> Deserialize<'src, 'buf> for StringBuf<N> {
         }
         let mut buf = [0; N];
         buf[..s.len()].copy_from_slice(s.as_bytes());
-        Ok(StringBuf { buf, len: s.len() })
+        Ok(StringArray { buf, len: s.len() })
     }
 }
