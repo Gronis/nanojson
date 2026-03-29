@@ -6,7 +6,7 @@ description = "Derive macros (Serialize, Deserialize) for the nanojson crate."
 license = "MIT"
 repository = "https://github.com/rGradeup/nanojson"
 keywords = ["json", "no_std", "derive", "proc-macro", "embedded"]
-categories = ["development-tools::procedural-macros"]
+categories = ["encoding", "embedded", "no-std", "parsing"]
 
 [lib]
 proc-macro = true
