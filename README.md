@@ -238,6 +238,7 @@ Serialization errors are `SerializeError<W::Error>`:
 | `SerializeError::Write(e)` | Write error from the sink (e.g. `WriteError::BufferFull` from `SliceWriter`) |
 | `SerializeError::DepthExceeded` | Nesting exceeded the `DEPTH` const generic (default 32) |
 | `SerializeError::InvalidState` | `member_key` called outside an object or twice without an intervening value |
+| `SerializeError::InvalidUtf8(offset)` | Final string isn't utf-8 compatible. This indicates a serialization bug |
 
 Parse errors are `ParseError { kind: ParseErrorKind, offset: usize }`. The `offset` is a byte position in the source slice.
 
@@ -248,8 +249,8 @@ Parse errors are `ParseError { kind: ParseErrorKind, offset: usize }`. The `offs
 | `InvalidEscape(byte)` | Unknown `\X` escape sequence |
 | `StringBufferOverflow` | Decoded string didn't fit in the scratch buffer |
 | `InvalidUtf8` | String content is not valid UTF-8 after unescaping |
-| `UnknownField` | Key not recognised by the deserializer (via `parser.unknown_field()`) |
-| `MissingField` | A required field was absent (used by derived code) |
+| `UnknownField { type_name, expected_fields }` | Key not recognised by the deserializer |
+| `MissingField { field }` | A required `field` was absent (used by derived code) |
 
 ---
 
