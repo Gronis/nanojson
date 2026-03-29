@@ -96,27 +96,16 @@ fn gen_serialize_fields(fields: &[ParsedField], self_expr: &str) -> Result<Strin
 }
 
 fn gen_serialize_enum(variants: &[ParsedVariant]) -> Result<String, TokenStream> {
-    let all_unit = variants.iter().all(|v| matches!(v.fields, VariantFields::Unit));
     let mut arms = String::new();
     for v in variants {
         let vname = &v.name;
         let jname = escape_rust_str(&v.json_name);
         let arm = match &v.fields {
-            VariantFields::Unit if all_unit => {
-                // Pure unit enum: serialize as a plain JSON string.
-                format!("Self::{vname} => {{ __json.string({jname})?; }}")
-            }
+            // Unit variants always serialize as a plain JSON string, whether the
+            // enum is pure-unit or mixed. The deserializer accepts both this form
+            // and the {"Variant": null} object form for maximum compatibility.
             VariantFields::Unit => {
-                // Mixed enum: use externally-tagged format `{"Variant": null}`
-                // so it round-trips symmetrically with the deserializer.
-                format!(
-                    "Self::{vname} => {{ \
-                        __json.object_begin()?; \
-                        __json.member_key({jname})?; \
-                        __json.null()?; \
-                        __json.object_end()?; \
-                    }}"
-                )
+                format!("Self::{vname} => {{ __json.string({jname})?; }}")
             }
             VariantFields::Named(fields) => {
                 // Pattern: Self::Variant { field1, field2, ... }
@@ -274,7 +263,48 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
         ));
         code.push_str("}"); // match
     } else {
-        // Externally tagged: { "VariantName": { ...fields... } }
+        // Mixed enum: unit variants serialize as plain strings; struct variants use
+        // externally-tagged objects.  The deserializer accepts both:
+        //   "Logout"            – the canonical form produced by nanojson
+        //   {"Logout": null}    – alternative object form (for interop / hand-written JSON)
+
+        // ---- string path: only unit variants are valid here ----
+        code.push_str("if __json.is_string_ahead() {");
+        code.push_str("let __tag = __json.string()?;");
+        code.push_str("match __tag {");
+        for v in variants {
+            if matches!(v.fields, VariantFields::Unit) {
+                let vname = &v.name;
+                let jname = escape_rust_str(&v.json_name);
+                code.push_str(&format!(
+                    "{jname} => ::core::result::Result::Ok({name}::{vname}),"
+                ));
+            }
+        }
+        // Struct variants named as a plain string are a type mismatch.
+        for v in variants {
+            if matches!(v.fields, VariantFields::Named(_)) {
+                let jname = escape_rust_str(&v.json_name);
+                code.push_str(&format!(
+                    "{jname} => return ::core::result::Result::Err(::nanojson::ParseError {{ \
+                        kind: ::nanojson::ParseErrorKind::UnexpectedToken {{ \
+                            expected: \"object\", got: \"string\" \
+                        }}, \
+                        offset: __json.error_offset() \
+                    }}),"
+                ));
+            }
+        }
+        code.push_str(&format!(
+            "_ => return ::core::result::Result::Err(::nanojson::ParseError {{ \
+                kind: ::nanojson::ParseErrorKind::UnknownField, \
+                offset: __json.error_offset() \
+            }}),"
+        ));
+        code.push_str("}"); // match
+
+        // ---- object path: struct variants + optional {"Unit": null} ----
+        code.push_str("} else {");
         code.push_str("__json.object_begin()?;");
         code.push_str("let __result = if let ::core::option::Option::Some(__tag) = __json.object_member()? {");
         code.push_str("match __tag {");
@@ -283,7 +313,6 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
             let jname = escape_rust_str(&v.json_name);
             let inner = match &v.fields {
                 VariantFields::Unit => {
-                    // consume null or empty object
                     format!("{{ __json.null()?; {name}::{vname} }}")
                 }
                 VariantFields::Named(fields) => {
@@ -310,6 +339,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
         code.push_str("};"); // if let
         code.push_str("__json.object_end()?;");
         code.push_str("::core::result::Result::Ok(__result)");
+        code.push_str("}"); // else (object path)
     }
 
     Ok(code)

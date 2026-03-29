@@ -77,6 +77,16 @@ enum Shape {
     Rect { width: i64, height: i64 },
 }
 
+// Mixed enum: unit variants and struct variants together.
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum Action {
+    Idle,                          // unit variant → "Idle"
+    #[nanojson(rename = "quit")]
+    Quit,                          // unit variant with rename → "quit"
+    Move { x: i64, y: i64 },      // struct variant → {"Move": {"x": …, "y": …}}
+    Attack { damage: i64 },
+}
+
 // Struct with a &str field — only Serialize is derived.
 // Deserialize for &str fields requires manual impl (scratch buffer reuse).
 #[derive(Serialize, Debug)]
@@ -640,6 +650,81 @@ fn test_struct_enum_unknown_variant_error() {
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField, .. })
     ));
+}
+
+// ============================================================
+// ---- Mixed enum (unit + struct variants) ----
+// ============================================================
+
+#[test]
+fn test_mixed_enum_unit_variant_serializes_as_string() {
+    assert_eq!(nanojson::stringify(&Action::Idle).unwrap(), r#""Idle""#);
+    assert_eq!(nanojson::stringify(&Action::Quit).unwrap(), r#""quit""#);
+}
+
+#[test]
+fn test_mixed_enum_struct_variant_serializes_as_object() {
+    assert_eq!(
+        nanojson::stringify(&Action::Move { x: 3, y: -1 }).unwrap(),
+        r#"{"Move":{"x":3,"y":-1}}"#
+    );
+    assert_eq!(
+        nanojson::stringify(&Action::Attack { damage: 10 }).unwrap(),
+        r#"{"Attack":{"damage":10}}"#
+    );
+}
+
+#[test]
+fn test_mixed_enum_unit_variant_roundtrip() {
+    assert_eq!(roundtrip(&Action::Idle), Action::Idle);
+    assert_eq!(roundtrip(&Action::Quit), Action::Quit);
+}
+
+#[test]
+fn test_mixed_enum_struct_variant_roundtrip() {
+    assert_eq!(roundtrip(&Action::Move { x: 5, y: 10 }), Action::Move { x: 5, y: 10 });
+    assert_eq!(roundtrip(&Action::Attack { damage: 99 }), Action::Attack { damage: 99 });
+}
+
+#[test]
+fn test_mixed_enum_deserialize_unit_as_object_form() {
+    // {"Idle": null} must also be accepted for interop.
+    let v: Action = nanojson::parse(r#"{"Idle": null}"#).unwrap();
+    assert_eq!(v, Action::Idle);
+    let v: Action = nanojson::parse(r#"{"quit": null}"#).unwrap();
+    assert_eq!(v, Action::Quit);
+}
+
+#[test]
+fn test_mixed_enum_struct_variant_as_plain_string_is_error() {
+    // "Move" as a plain string should be an error (it needs an object).
+    let result: Result<Action, _> = nanojson::parse(r#""Move""#);
+    assert!(matches!(
+        result,
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnexpectedToken { .. }, .. })
+    ));
+}
+
+#[test]
+fn test_mixed_enum_unknown_variant_error() {
+    let result: Result<Action, _> = nanojson::parse(r#""Unknown""#);
+    assert!(matches!(
+        result,
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField, .. })
+    ));
+}
+
+#[test]
+fn test_mixed_enum_in_vec_roundtrip() {
+    let actions = vec![
+        Action::Idle,
+        Action::Move { x: 1, y: 2 },
+        Action::Quit,
+        Action::Attack { damage: 5 },
+    ];
+    let json = nanojson::stringify(&actions).unwrap();
+    let back: std::vec::Vec<Action> = nanojson::parse(&json).unwrap();
+    assert_eq!(actions, back);
 }
 
 #[test]
