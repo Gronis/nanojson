@@ -768,7 +768,7 @@ pub fn stringify_manual(
 ///
 /// # Example
 /// ```
-/// let json = nanojson::stringify_pretty(&[1i64, 2, 3], 2).unwrap();
+/// let json = nanojson::stringify_pretty(2, &[1i64, 2, 3]).unwrap();
 /// assert_eq!(json, "[\n  1,\n  2,\n  3\n]");
 /// ```
 #[cfg(feature = "std")]
