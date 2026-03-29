@@ -291,7 +291,7 @@ nanojson/
 ```sh
 cargo run --example simple        # simple derive example
 cargo run --example nostd         # almost same as simple but no_std
-cargo run --example medium        # medium derive example
+cargo run --example big           # big derive example
 cargo run --example manual        # hand-written serialize + parse
 cargo run --example derive        # derive-macro workflow
 cargo run --example sensor_log    # embedded sensor log
