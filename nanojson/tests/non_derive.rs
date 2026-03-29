@@ -363,6 +363,36 @@ fn test_buffer_full_mid_object() {
 }
 
 #[test]
+fn test_member_key_outside_object() {
+    // member_key at root level (no scope) should return InvalidState
+    let mut buf = [0u8; 64];
+    let mut w = SliceWriter::new(&mut buf);
+    let mut json: Serializer<_, 32> = Serializer::new(&mut w);
+    assert!(matches!(json.member_key("x"), Err(SerializeError::InvalidState)));
+}
+
+#[test]
+fn test_member_key_inside_array() {
+    // member_key inside an array scope should return InvalidState
+    let result = try_serialize::<32, _>(&mut [0u8; 64], |j| {
+        j.array_begin()?;
+        j.member_key("x")
+    });
+    assert!(matches!(result, Err(SerializeError::InvalidState)));
+}
+
+#[test]
+fn test_member_key_called_twice() {
+    // calling member_key twice without an intervening value should return InvalidState
+    let result = try_serialize::<32, _>(&mut [0u8; 64], |j| {
+        j.object_begin()?;
+        j.member_key("x")?;
+        j.member_key("y") // second key without a value
+    });
+    assert!(matches!(result, Err(SerializeError::InvalidState)));
+}
+
+#[test]
 fn test_depth_exceeded() {
     // DEPTH=3: can nest at most 3 levels
     let mut buf = [0u8; 256];

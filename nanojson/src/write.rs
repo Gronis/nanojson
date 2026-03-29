@@ -49,7 +49,12 @@ impl Write for SliceWriter<'_> {
 
 /// A write sink that counts bytes without storing them.
 /// Useful for pre-computing the required buffer size.
+#[derive(Default)]
 pub struct SizeCounter {
+    /// Running byte count.
+    ///
+    /// On 32-bit targets this silently wraps if total output exceeds 4 GiB;
+    /// this is not a concern in practice for embedded use.
     pub count: usize,
 }
 

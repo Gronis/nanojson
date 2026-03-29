@@ -20,4 +20,5 @@ pub use serialize::{stringify, stringify_manual};
 #[cfg(feature = "std")]
 pub use deserialize::{parse, parse_manual, parse_bytes};
 
+#[cfg(feature = "derive")]
 pub use nanojson_derive::{Deserialize, Serialize};

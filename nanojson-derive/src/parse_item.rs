@@ -311,7 +311,11 @@ fn parse_variants(group: Group) -> Result<Vec<ParsedVariant>, TokenStream> {
         // Named fields `{ ... }`, tuple `( ... )`, or unit
         let fields = match toks.peek() {
             Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Brace => {
-                let g = match toks.next() { Some(TokenTree::Group(g)) => g, _ => unreachable!() };
+                let g = match toks.next() {
+                    Some(TokenTree::Group(g)) => g,
+                    Some(other) => return compiler_error!(other, "internal error: expected `{{...}}`"),
+                    None        => return compiler_error!("internal error: unexpected end of input"),
+                };
                 let f = parse_named_fields(g)?;
                 VariantFields::Named(f)
             }
@@ -396,7 +400,7 @@ pub(crate) fn parse_item(input: TokenStream) -> Result<ParsedItem, TokenStream> 
     let kind = match kw_str.as_str() {
         "struct" => ItemKind::Struct(parse_named_fields(body)?),
         "enum"   => ItemKind::Enum(parse_variants(body)?),
-        _ => unreachable!(),
+        _ => return compiler_error!(kw, "nanojson-derive: unexpected keyword `{kw_str}`"),
     };
 
     Ok(ParsedItem { name: name_str, name_span, generics, kind })

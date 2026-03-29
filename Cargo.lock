@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "nanojson"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "nanojson-derive",
 ]
 
 [[package]]
 name = "nanojson-derive"
-version = "0.1.0"
+version = "0.2.0"

@@ -172,7 +172,6 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         if ch == b'"' {
             self.pos += 1;
             self.str_len = 0;
-            let mut has_escapes = false;
 
             loop {
                 if self.pos >= self.src.len() {
@@ -186,11 +185,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                     b'"' => {
                         self.pos += 1;
                         self.token = Token::String;
-                        let _ = has_escapes;
                         return Ok(());
                     }
                     b'\\' => {
-                        has_escapes = true;
                         self.pos += 1;
                         if self.pos >= self.src.len() {
                             self.token = Token::Invalid;

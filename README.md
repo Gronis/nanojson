@@ -2,7 +2,7 @@
 
 A `#![no_std]`, allocation-free, no dependency JSON serializer and pull-parser for Rust.
 
-nanojson is built for constrained environments: embedded systems, firmware, and any code that cannot use a heap. You supply the output buffer and the scratch space; nanojson never allocates.
+nanojson is built for constrained environments: embedded systems, firmware, and any code that cannot use a heap. You supply the output buffer and the scratch space; nanojson never allocates unless you use the std interface.
 
 It an immidiate mode / eager parser, meaning it does not create a tree structure or anything like that. The parser and schema is built into a single pass.
 

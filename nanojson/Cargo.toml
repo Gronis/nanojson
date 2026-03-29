@@ -1,7 +1,12 @@
 [package]
 name = "nanojson"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+description = "A #![no_std], allocation-free, zero-dependency JSON serializer and pull-parser."
+license = "MIT"
+repository = "https://github.com/Gronis/nanojson"
+keywords = ["json", "no_std", "embedded", "serialization", "parser"]
+categories = ["encoding", "embedded", "no-std"]
 
 [features]
 default = ["std", "derive"]
@@ -9,4 +14,36 @@ std = []
 derive = ["nanojson-derive"]
 
 [dependencies]
-nanojson-derive = { path = "../nanojson-derive", optional = true }
+nanojson-derive = { path = "../nanojson-derive", version = "0.2.0", optional = true }
+
+[[test]]
+name = "derive_roundtrip"
+required-features = ["derive", "std"]
+
+[[test]]
+name = "readme"
+required-features = ["derive", "std"]
+
+[[example]]
+name = "simple"
+required-features = ["derive", "std"]
+
+[[example]]
+name = "nostd"
+required-features = ["derive"]
+
+[[example]]
+name = "manual"
+required-features = ["std"]
+
+[[example]]
+name = "derive"
+required-features = ["derive", "std"]
+
+[[example]]
+name = "sensor_log"
+required-features = ["std"]
+
+[[example]]
+name = "recursive"
+required-features = ["std"]

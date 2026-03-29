@@ -33,7 +33,10 @@ pub struct Serializer<W, const DEPTH: usize = 32> {
     writer: W,
     scopes: [Scope; DEPTH],
     depth: usize,
-    /// Pretty-print indent width in spaces. 0 = compact output.
+    /// Pretty-print indent width in spaces. `0` = compact output (default).
+    ///
+    /// Setting this to a very large value causes the serializer to write that many
+    /// space bytes per nesting level. Reasonable values are `2` or `4`.
     pub pp: usize,
 }
 
@@ -42,6 +45,9 @@ pub struct Serializer<W, const DEPTH: usize = 32> {
 pub enum SerializeError<E> {
     Write(E),
     DepthExceeded,
+    /// `member_key` / `member_key_bytes` was called outside an object scope,
+    /// or was called twice without an intervening value.
+    InvalidState,
 }
 
 impl<E> From<E> for SerializeError<E> {
@@ -50,15 +56,26 @@ impl<E> From<E> for SerializeError<E> {
     }
 }
 
-// Convenience alias when using SliceWriter
-impl From<SerializeError<WriteError>> for WriteError {
-    fn from(e: SerializeError<WriteError>) -> Self {
-        match e {
-            SerializeError::Write(e) => e,
-            SerializeError::DepthExceeded => WriteError::DepthExceeded,
+impl<E: core::fmt::Display> core::fmt::Display for SerializeError<E> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            SerializeError::Write(e)      => write!(f, "write error: {e}"),
+            SerializeError::DepthExceeded => f.write_str("nesting depth exceeded"),
+            SerializeError::InvalidState  => f.write_str("invalid serializer call order"),
         }
     }
 }
+
+#[cfg(feature = "std")]
+impl<E: std::error::Error + 'static> std::error::Error for SerializeError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            SerializeError::Write(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 
 impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
     pub fn new(writer: W) -> Self {
@@ -302,9 +319,10 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
 
     pub fn member_key_bytes(&mut self, key: &[u8]) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
-        let scope = self.current_scope().expect("member_key called outside object");
-        debug_assert_eq!(scope.kind, ScopeKind::Object);
-        debug_assert!(!scope.key, "member_key called twice without a value");
+        match self.current_scope() {
+            Some(s) if s.kind == ScopeKind::Object && !s.key => {}
+            _ => return Err(SerializeError::InvalidState),
+        }
         self.write_string_escaped(key)?;
         self.write(b":")?;
         if let Some(s) = self.current_scope() {
