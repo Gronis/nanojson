@@ -1,10 +1,8 @@
 extern crate std;
 use std::borrow::ToOwned;
+use std::collections::HashMap;
 
-use nanojson::write::SliceWriter;
-use nanojson::serialize::{Serializer, Serialize};
-use nanojson::deserialize::{Parser, Deserialize};
-use nanojson_derive::{Serialize, Deserialize};
+use nanojson::{Serialize, Deserialize, Parser, Serializer, SliceWriter};
 
 // ============================================================
 // ---- Test types ----
@@ -764,4 +762,69 @@ fn test_default_required_still_required() {
 fn test_default_roundtrip() {
     let v = WithDefaults { required: 3, count: 10, label: "x".to_owned(), active: true };
     assert_eq!(v, roundtrip(&v));
+}
+
+// ============================================================
+// ---- Generic field types (HashMap, nested generics) ----
+// ============================================================
+
+// Derive must survive fields whose types contain commas inside `<...>`.
+#[derive(nanojson::Serialize, nanojson::Deserialize, Debug, PartialEq)]
+struct WithMap {
+    name: String,
+    scores: HashMap<String, i64>,
+}
+
+#[derive(nanojson::Serialize, nanojson::Deserialize, Debug, PartialEq)]
+struct MultiMap {
+    labels: HashMap<String, String>,
+    counts: HashMap<String, i64>,
+}
+
+// Nested generics: HashMap whose value is a Vec.
+#[derive(nanojson::Serialize, nanojson::Deserialize, Debug, PartialEq)]
+struct NestedGeneric {
+    groups: HashMap<String, Vec<i64>>,
+}
+
+#[test]
+fn test_derive_hashmap_field() {
+    let mut scores = HashMap::new();
+    scores.insert("alice".to_owned(), 42i64);
+    scores.insert("bob".to_owned(), 7i64);
+    let v = WithMap { name: "leaderboard".to_owned(), scores };
+    let json = nanojson::stringify(&v).unwrap();
+    let back: WithMap = nanojson::parse(&json).unwrap();
+    assert_eq!(v, back);
+}
+
+#[test]
+fn test_derive_multiple_hashmap_fields() {
+    let mut labels = HashMap::new();
+    labels.insert("env".to_owned(), "prod".to_owned());
+    let mut counts = HashMap::new();
+    counts.insert("requests".to_owned(), 100i64);
+    let v = MultiMap { labels, counts };
+    let json = nanojson::stringify(&v).unwrap();
+    let back: MultiMap = nanojson::parse(&json).unwrap();
+    assert_eq!(v, back);
+}
+
+#[test]
+fn test_derive_nested_generic_field() {
+    let mut groups = HashMap::new();
+    groups.insert("odds".to_owned(), vec![1i64, 3, 5]);
+    groups.insert("evens".to_owned(), vec![2i64, 4, 6]);
+    let v = NestedGeneric { groups };
+    let json = nanojson::stringify(&v).unwrap();
+    let back: NestedGeneric = nanojson::parse(&json).unwrap();
+    assert_eq!(v, back);
+}
+
+#[test]
+fn test_derive_hashmap_empty() {
+    let v = WithMap { name: "empty".to_owned(), scores: HashMap::new() };
+    let json = nanojson::stringify(&v).unwrap();
+    let back: WithMap = nanojson::parse(&json).unwrap();
+    assert_eq!(v, back);
 }

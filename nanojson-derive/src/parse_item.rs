@@ -92,15 +92,26 @@ impl Tokens {
         }
     }
 
-    /// Collect everything up to (not including) a `,` or end, consuming any trailing `,`.
+    /// Collect a type up to (not including) a `,` at angle-bracket depth 0, consuming
+    /// any trailing `,`. Angle brackets in generic parameters (e.g. `HashMap<String, V>`)
+    /// are tracked so their inner commas are not mistaken for field separators.
     fn collect_until_comma(&mut self) -> Vec<TokenTree> {
         let mut out = Vec::new();
+        let mut depth = 0usize;
         loop {
             match self.peek() {
                 None => break,
-                Some(TokenTree::Punct(p)) if p.as_char() == ',' => {
+                Some(TokenTree::Punct(p)) if p.as_char() == ',' && depth == 0 => {
                     self.pos += 1;
                     break;
+                }
+                Some(TokenTree::Punct(p)) if p.as_char() == '<' => {
+                    depth += 1;
+                    out.push(self.next().unwrap());
+                }
+                Some(TokenTree::Punct(p)) if p.as_char() == '>' => {
+                    depth = depth.saturating_sub(1);
+                    out.push(self.next().unwrap());
                 }
                 _ => out.push(self.next().unwrap()),
             }

@@ -37,6 +37,10 @@ name = "medium"
 required-features = ["derive", "std"]
 
 [[example]]
+name = "big"
+required-features = ["derive", "std"]
+
+[[example]]
 name = "nostd"
 required-features = ["derive"]
 

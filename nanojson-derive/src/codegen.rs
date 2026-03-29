@@ -96,13 +96,27 @@ fn gen_serialize_fields(fields: &[ParsedField], self_expr: &str) -> Result<Strin
 }
 
 fn gen_serialize_enum(variants: &[ParsedVariant]) -> Result<String, TokenStream> {
+    let all_unit = variants.iter().all(|v| matches!(v.fields, VariantFields::Unit));
     let mut arms = String::new();
     for v in variants {
         let vname = &v.name;
         let jname = escape_rust_str(&v.json_name);
         let arm = match &v.fields {
-            VariantFields::Unit => {
+            VariantFields::Unit if all_unit => {
+                // Pure unit enum: serialize as a plain JSON string.
                 format!("Self::{vname} => {{ __json.string({jname})?; }}")
+            }
+            VariantFields::Unit => {
+                // Mixed enum: use externally-tagged format `{"Variant": null}`
+                // so it round-trips symmetrically with the deserializer.
+                format!(
+                    "Self::{vname} => {{ \
+                        __json.object_begin()?; \
+                        __json.member_key({jname})?; \
+                        __json.null()?; \
+                        __json.object_end()?; \
+                    }}"
+                )
             }
             VariantFields::Named(fields) => {
                 // Pattern: Self::Variant { field1, field2, ... }
