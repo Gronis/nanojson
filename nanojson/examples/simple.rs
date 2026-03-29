@@ -10,10 +10,10 @@ struct MyStruct {
 
 fn main() {
     // Parse a JSON string into a struct
-    let json = r#"{"num": 0.4}"#;
+    let json = r#"{}"#;
     let my_struct = nanojson::parse::<MyStruct>(json);
 
-    println!("Parsed res: {:?}", my_struct);
+    if let Err(ref e) = my_struct { e.print(json); }
     if let Ok(mut my_struct) = my_struct {
         println!("Parsed: {:?}", my_struct);
 
