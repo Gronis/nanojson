@@ -266,12 +266,6 @@ nanojson/
 │   │   ├── deserialize.rs        Parser, Deserialize
 │   │   └── error.rs              Error types
 │   ├── examples/
-│   │   ├── simple.rs             simple derive example
-│   │   ├── nostd.rs              almost same as simple but no_std
-│   │   ├── manual.rs             hand-written serialize + parse (both tiers)
-│   │   ├── derive.rs             derive-macro workflow (both tiers)
-│   │   ├── sensor_log.rs         embedded sensor log (both tiers)
-│   │   └── recursive.rs          recursive tree + depth-limit handling
 │   └── tests/
 │       ├── readme.rs             tests for README.md code
 │       ├── non_derive.rs         tests for manual parsing with derive trait
@@ -296,6 +290,7 @@ nanojson/
 ```sh
 cargo run --example simple        # simple derive example
 cargo run --example nostd         # almost same as simple but no_std
+cargo run --example medium        # medium derive example
 cargo run --example manual        # hand-written serialize + parse
 cargo run --example derive        # derive-macro workflow
 cargo run --example sensor_log    # embedded sensor log
