@@ -133,7 +133,7 @@ fn main() {
     // 1. Shallow tree — works with the default depth limit (32).
     // ------------------------------------------------------------------
     let shallow = Tree::nested(5, 42);
-    let json = nanojson::to_string(&shallow).unwrap();
+    let json = nanojson::stringify(&shallow).unwrap();
     std::println!("Shallow tree (5 deep): {json}");
 
     // ------------------------------------------------------------------
@@ -145,9 +145,9 @@ fn main() {
     // ------------------------------------------------------------------
     let deep = Tree::nested(50, 7);
 
-    match nanojson::to_string(&deep) {
+    match nanojson::stringify(&deep) {
         Err(SerializeError::DepthExceeded) => {
-            std::println!("\nDeep tree (50 levels) via `to_string`: DepthExceeded.");
+            std::println!("\nDeep tree (50 levels) via `stringify`: DepthExceeded.");
             std::println!("  The `Serialize` trait uses Serializer<W, 32> (the default).");
         }
         Ok(json) => std::println!("  Unexpectedly succeeded: {} bytes", json.len()),
@@ -199,7 +199,7 @@ fn main() {
     //    before the stack overflows.
     // ------------------------------------------------------------------
 
-    let src_10 = nanojson::to_string(&Tree::nested(10, 99)).unwrap();
+    let src_10 = nanojson::stringify(&Tree::nested(10, 99)).unwrap();
     std::println!("\nSource JSON (10 deep, first 40 chars): {:.40}...", &src_10);
 
     // 4a. Generous limit — succeeds.
@@ -229,7 +229,7 @@ fn main() {
     //    depth (32) and the parse limit.
     // ------------------------------------------------------------------
     let fitting = Tree::nested(30, 5);
-    let json = nanojson::to_string(&fitting).unwrap();
+    let json = nanojson::stringify(&fitting).unwrap();
     let mut str_buf = [0u8; 16];
     let mut parser = Parser::new(json.as_bytes(), &mut str_buf);
     let parsed = parse_tree(&mut parser, 0, 32).unwrap();

@@ -1,8 +1,22 @@
 # nanojson
 
-A `#![no_std]`, allocation-free JSON serializer and pull-parser for Rust.
+A `#![no_std]`, allocation-free, no dependency JSON serializer and pull-parser for Rust.
 
 nanojson is built for constrained environments: embedded systems, firmware, and any code that cannot use a heap. You supply the output buffer and the scratch space; nanojson never allocates.
+
+It an immidiate mode / eager parser, meaning it does not create a tree structure or anything like that. The parser and schema is built into a single pass.
+
+The main inspiration for this crate is jim by tsoding. It works in a similar fashion.
+
+Main goals:
+* No dependencies
+* No std compatible
+* As small and simple as possible
+
+Non goals:
+* Serde compatibility
+* Async
+* Parallelized processing
 
 Enable the `std` feature (on by default) and nanojson also provides one-liner helpers that allocate for you — no buffer choices needed.
 
@@ -26,10 +40,10 @@ No buffer choices. The output `String` grows as needed; the scratch buffer for p
 
 ```rust
 // One-liner for a derived type
-let json: String = nanojson::to_string(&entity)?;
+let json: String = nanojson::stringify(&entity)?;
 
 // Closure form for hand-written JSON
-let json: String = nanojson::serialize_to_string(|s| {
+let json: String = nanojson::stringify_manual(|s| {
     s.object_begin()?;
       s.member_key("name")?; s.string("Alice")?;
       s.member_key("age")?;  s.integer(30)?;
@@ -41,11 +55,11 @@ let json: String = nanojson::serialize_to_string(|s| {
 
 ```rust
 // One-liner for a derived type
-let entity: Entity = nanojson::from_str(&json)?;
-let entity: Entity = nanojson::from_bytes(json.as_bytes())?;
+let entity: Entity = nanojson::parse(&json)?;
+let entity: Entity = nanojson::parse_bytes(json.as_bytes())?;
 
 // Closure form for manual parsing
-let (x, y) = nanojson::parse_dyn(json.as_bytes(), |p| {
+let (x, y) = nanojson::parse_manual(json.as_bytes(), |p| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
     while let Some(k) = p.object_member()? {
@@ -70,11 +84,11 @@ All memory on the stack. You choose `N` (output buffer size) and `STR_BUF` (stri
 
 ```rust
 // One-liner for a derived type
-let (buf, len) = nanojson::to_json::<256, _>(&entity)?;
+let (buf, len) = nanojson::stringify_sized::<256, _>(&entity)?;
 let json: &[u8] = &buf[..len];
 
 // Closure form
-let (buf, len) = nanojson::serialize::<256>(|s| {
+let (buf, len) = nanojson::stringify_manual_sized::<256>(|s| {
     s.object_begin()?;
       s.member_key("name")?; s.string("Alice")?;
       s.member_key("age")?;  s.integer(30)?;
@@ -87,17 +101,22 @@ let json: &[u8] = &buf[..len];
 
 ```rust
 // One-liner for a derived type (STR_BUF = 64)
-let entity: Entity = nanojson::from_json::<64, _>(json)?;
+let entity: Entity = nanojson::parse_sized::<64, _>(json)?;
 
-// Low-level parser for hand-written code
-let mut str_buf = [0u8; 64];
-let mut p = Parser::new(json, &mut str_buf);
-p.object_begin()?;
-while let Some(key) = p.object_member()? {
-    // Copy key before the next call overwrites the scratch buffer.
-    match key { "x" => { ... } _ => {} }
-}
-p.object_end()?;
+// Low-level parser for hand-written code 
+let (x, y) = nanojson::parse_manual_sized::<64, _>(json.as_bytes(), |p| {
+    p.object_begin()?;
+    let mut x = 0i64; let mut y = 0i64;
+    while let Some(k) = p.object_member()? {
+        match k {
+            "x" => x = p.number_str()?.parse().unwrap(),
+            "y" => y = p.number_str()?.parse().unwrap(),
+            _   => {}
+        }
+    }
+    p.object_end()?;
+    Ok((x, y))
+})?;
 ```
 
 ---
@@ -155,20 +174,20 @@ enum Event {
 ```rust
 let entity = Entity { id: 42, active: true, position: Vec2 { x: 10, y: -5 }, health: 100 };
 
-let json: String = nanojson::to_string(&entity)?;
+let json: String = nanojson::stringify(&entity)?;
 // {"id":42,"is_active":true,"position":{"x":10,"y":-5},"health":100}
 
-let entity2: Entity = nanojson::from_str(&json)?;
+let entity2: Entity = nanojson::parse(&json)?;
 assert_eq!(entity, entity2);
 ```
 
 #### `no_std` tier roundtrip
 
 ```rust
-let (buf, len) = nanojson::to_json::<256, _>(&entity)?;
+let (buf, len) = nanojson::stringify_sized::<256, _>(&entity)?;
 // buf[..len] contains the JSON bytes
 
-let entity2: Entity = nanojson::from_json::<64, _>(&buf[..len])?;
+let entity2: Entity = nanojson::parse_sized::<64, _>(&buf[..len])?;
 assert_eq!(entity, entity2);
 ```
 
@@ -269,6 +288,8 @@ nanojson/
 ## Running the examples
 
 ```sh
+cargo run --example simple        # simple derive example
+cargo run --example nostd         # almost same as simple but no_std
 cargo run --example manual        # hand-written serialize + parse
 cargo run --example derive        # derive-macro workflow
 cargo run --example sensor_log    # embedded sensor log

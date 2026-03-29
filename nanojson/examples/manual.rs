@@ -21,7 +21,7 @@ fn main() {
     // 1. std tier — serialize into a String, no size choice needed
     // ----------------------------------------------------------------
 
-    let json = nanojson::serialize_to_string(|s| {
+    let json = nanojson::stringify_manual(|s| {
         s.object_begin()?;
           s.member_key("name")?;   s.string("Alice")?;
           s.member_key("scores")?;
@@ -52,7 +52,7 @@ fn main() {
     let mut active = false;
     let mut level = 0i64;
 
-    nanojson::parse_dyn(json.as_bytes(), |p| {
+    nanojson::parse_manual(json.as_bytes(), |p| {
         p.object_begin()?;
         while let Some(key) = p.object_member()? {
             // Copy key before the next parse call overwrites the scratch buffer.
@@ -106,7 +106,7 @@ fn main() {
     // 3. no_std tier — serialize into a fixed [u8; 512] stack buffer
     // ----------------------------------------------------------------
 
-    let (buf, len) = nanojson::serialize::<512>(|s| {
+    let (buf, len) = nanojson::stringify_manual_sized::<512>(|s| {
         s.object_begin()?;
           s.member_key("name")?;   s.string("Alice")?;
           s.member_key("scores")?;

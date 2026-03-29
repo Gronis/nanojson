@@ -60,10 +60,10 @@ fn main() {
     // std tier — String in, String out, no buffer choices
     // ----------------------------------------------------------------
 
-    let json = nanojson::to_string(&entity).unwrap();
+    let json = nanojson::stringify(&entity).unwrap();
     std::println!("Entity JSON (std): {json}");
 
-    let entity2: Entity = nanojson::from_str(&json).unwrap();
+    let entity2: Entity = nanojson::parse(&json).unwrap();
     std::println!("Decoded (std):     {:?}", entity2);
     assert_eq!(entity, entity2);
 
@@ -75,10 +75,10 @@ fn main() {
     //                     only needs to fit the longest single field value.
     // ----------------------------------------------------------------
 
-    let (buf, len) = nanojson::to_json::<256, _>(&entity).unwrap();
+    let (buf, len) = nanojson::stringify_sized::<256, _>(&entity).unwrap();
     std::println!("\nEntity JSON (no_std, {len} bytes): {}", core::str::from_utf8(&buf[..len]).unwrap());
 
-    let entity3: Entity = nanojson::from_json::<64, _>(&buf[..len]).unwrap();
+    let entity3: Entity = nanojson::parse_sized::<64, _>(&buf[..len]).unwrap();
     std::println!("Decoded (no_std):  {:?}", entity3);
     assert_eq!(entity, entity3);
 
@@ -88,14 +88,14 @@ fn main() {
 
     let team = Team::Spectator;
 
-    let json = nanojson::to_string(&team).unwrap();
+    let json = nanojson::stringify(&team).unwrap();
     std::println!("\nTeam JSON (std):    {json}");
-    let team2: Team = nanojson::from_str(&json).unwrap();
+    let team2: Team = nanojson::parse(&json).unwrap();
     assert_eq!(team, team2);
 
-    let (buf, len) = nanojson::to_json::<16, _>(&team).unwrap();
+    let (buf, len) = nanojson::stringify_sized::<16, _>(&team).unwrap();
     std::println!("Team JSON (no_std): {}", core::str::from_utf8(&buf[..len]).unwrap());
-    let team3: Team = nanojson::from_json::<16, _>(&buf[..len]).unwrap();
+    let team3: Team = nanojson::parse_sized::<16, _>(&buf[..len]).unwrap();
     assert_eq!(team, team3);
 
     // ----------------------------------------------------------------
@@ -109,15 +109,15 @@ fn main() {
 
     for ev in &events {
         // std
-        let json = nanojson::to_string(ev).unwrap();
+        let json = nanojson::stringify(ev).unwrap();
         std::println!("\nEvent JSON (std):    {json}");
-        let ev2: Event = nanojson::from_str(&json).unwrap();
+        let ev2: Event = nanojson::parse(&json).unwrap();
         assert_eq!(*ev, ev2);
 
         // no_std
-        let (buf, len) = nanojson::to_json::<128, _>(ev).unwrap();
+        let (buf, len) = nanojson::stringify_sized::<128, _>(ev).unwrap();
         std::println!("Event JSON (no_std): {}", core::str::from_utf8(&buf[..len]).unwrap());
-        let ev3: Event = nanojson::from_json::<32, _>(&buf[..len]).unwrap();
+        let ev3: Event = nanojson::parse_sized::<32, _>(&buf[..len]).unwrap();
         assert_eq!(*ev, ev3);
     }
 
@@ -126,13 +126,13 @@ fn main() {
     // ----------------------------------------------------------------
 
     let bad = r#"{"id":1,"is_active":true,"position":{"x":0,"y":0},"health":100,"unknown":999}"#;
-    match nanojson::from_str::<Entity>(bad) {
+    match nanojson::parse::<Entity>(bad) {
         Err(e) => std::println!("\nExpected error (unknown field): {:?} at offset {}", e.kind, e.offset),
         Ok(_)  => panic!("should have failed"),
     }
 
     let incomplete = r#"{"id":2,"is_active":false,"position":{"x":1,"y":2}}"#;
-    match nanojson::from_str::<Entity>(incomplete) {
+    match nanojson::parse::<Entity>(incomplete) {
         Err(e) => std::println!("Expected error (missing field): {:?} at offset {}", e.kind, e.offset),
         Ok(_)  => panic!("should have failed"),
     }

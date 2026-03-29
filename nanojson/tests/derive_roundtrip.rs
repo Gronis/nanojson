@@ -460,29 +460,29 @@ fn test_unknown_field_in_nested_error() {
 // ============================================================
 
 #[test]
-fn test_to_json_from_json_roundtrip() {
+fn test_stringify_sized_from_json_roundtrip() {
     let p = Point { x: 3, y: -7 };
-    let (buf, len) = nanojson::to_json::<128, _>(&p).unwrap();
-    let p2: Point = nanojson::from_json::<64, _>(&buf[..len]).unwrap();
+    let (buf, len) = nanojson::stringify_sized::<128, _>(&p).unwrap();
+    let p2: Point = nanojson::parse_sized::<64, _>(&buf[..len]).unwrap();
     assert_eq!(p, p2);
 }
 
 #[test]
 fn test_serialize_closure_from_json() {
-    let (buf, len) = nanojson::serialize::<64>(|s| {
+    let (buf, len) = nanojson::stringify_manual_sized::<64>(|s| {
         s.object_begin()?;
         s.member_key("x")?; s.integer(10)?;
         s.member_key("y")?; s.integer(20)?;
         s.object_end()
     }).unwrap();
-    let p: Point = nanojson::from_json::<32, _>(&buf[..len]).unwrap();
+    let p: Point = nanojson::parse_sized::<32, _>(&buf[..len]).unwrap();
     assert_eq!(p, Point { x: 10, y: 20 });
 }
 
 #[test]
-fn test_measure_matches_to_json() {
+fn test_measure_matches_stringify_sized() {
     let p = Point { x: 1, y: 2 };
-    let (_, len) = nanojson::to_json::<128, _>(&p).unwrap();
+    let (_, len) = nanojson::stringify_sized::<128, _>(&p).unwrap();
     let measured = nanojson::measure(|s| p.serialize(s));
     assert_eq!(measured, len);
 }
@@ -500,10 +500,10 @@ fn test_measure_closure() {
 }
 
 #[test]
-fn test_to_json_nested() {
+fn test_stringify_sized_nested() {
     let person = Person { age: 30, active: true, address: Address { street_num: 1, zip: 99 } };
-    let (buf, len) = nanojson::to_json::<256, _>(&person).unwrap();
-    let person2: Person = nanojson::from_json::<64, _>(&buf[..len]).unwrap();
+    let (buf, len) = nanojson::stringify_sized::<256, _>(&person).unwrap();
+    let person2: Person = nanojson::parse_sized::<64, _>(&buf[..len]).unwrap();
     assert_eq!(person, person2);
 }
 
@@ -513,77 +513,84 @@ fn test_to_json_nested() {
 
 #[cfg(feature = "std")]
 #[test]
-fn test_to_string_from_str_roundtrip() {
+fn test_stringify_from_str_roundtrip() {
     let p = Point { x: 100, y: -200 };
-    let json = nanojson::to_string(&p).unwrap();
-    let p2: Point = nanojson::from_str(&json).unwrap();
+    let json = nanojson::stringify(&p).unwrap();
+    let p2: Point = nanojson::parse(&json).unwrap();
     assert_eq!(p, p2);
 }
 
 #[cfg(feature = "std")]
 #[test]
-fn test_to_string_from_bytes_roundtrip() {
+fn test_stringify_from_bytes_roundtrip() {
     let s = Sensor { value: 42, active: false };
-    let json = nanojson::to_string(&s).unwrap();
-    let s2: Sensor = nanojson::from_bytes(json.as_bytes()).unwrap();
+    let json = nanojson::stringify(&s).unwrap();
+    let s2: Sensor = nanojson::parse_bytes(json.as_bytes()).unwrap();
     assert_eq!(s, s2);
 }
 
 #[cfg(feature = "std")]
 #[test]
-fn test_serialize_to_string_closure() {
-    let json = nanojson::serialize_to_string(|s| {
+fn test_stringify_manual_closure() {
+    let json = nanojson::stringify_manual(|s| {
         s.object_begin()?;
         s.member_key("x")?; s.integer(7)?;
         s.member_key("y")?; s.integer(-2)?;
         s.object_end()
     }).unwrap();
     assert_eq!(json, r#"{"x":7,"y":-2}"#);
-    let p: Point = nanojson::from_str(&json).unwrap();
+    let p: Point = nanojson::parse(&json).unwrap();
     assert_eq!(p, Point { x: 7, y: -2 });
 }
 
 #[cfg(feature = "std")]
 #[test]
-fn test_parse_dyn_closure() {
+fn test_parse_manual_closure() {
     let src = br#"{"x":3,"y":4}"#;
-    let p = nanojson::parse_dyn::<Point>(src, |parser| Point::deserialize(parser)).unwrap();
+    let p = nanojson::parse_manual::<Point>(src, |parser| Point::deserialize(parser)).unwrap();
+    assert_eq!(p, Point { x: 3, y: 4 });
+}
+
+#[test]
+fn test_parse_manual_sized_closure() {
+    let src = br#"{"x":3,"y":4}"#;
+    let p = nanojson::parse_manual_sized::<256, Point>(src, |parser| Point::deserialize(parser)).unwrap();
     assert_eq!(p, Point { x: 3, y: 4 });
 }
 
 #[cfg(feature = "std")]
 #[test]
-fn test_to_string_nested_struct() {
+fn test_stringify_nested_struct() {
     let person = Person { age: 25, active: true, address: Address { street_num: 10, zip: 12345 } };
-    let json = nanojson::to_string(&person).unwrap();
-    let person2: Person = nanojson::from_str(&json).unwrap();
+    let json = nanojson::stringify(&person).unwrap();
+    let person2: Person = nanojson::parse(&json).unwrap();
     assert_eq!(person, person2);
 }
 
 #[cfg(feature = "std")]
 #[test]
-fn test_to_string_enum() {
+fn test_stringify_enum() {
     let dir = Direction::East;
-    let json = nanojson::to_string(&dir).unwrap();
+    let json = nanojson::stringify(&dir).unwrap();
     assert_eq!(json, "\"east\"");
-    let dir2: Direction = nanojson::from_str(&json).unwrap();
+    let dir2: Direction = nanojson::parse(&json).unwrap();
     assert_eq!(dir, dir2);
 }
 
 #[cfg(feature = "std")]
 #[test]
-fn test_to_string_struct_variant_enum() {
+fn test_stringify_struct_variant_enum() {
     let shape = Shape::Rect { width: 5, height: 10 };
-    let json = nanojson::to_string(&shape).unwrap();
-    let shape2: Shape = nanojson::from_str(&json).unwrap();
+    let json = nanojson::stringify(&shape).unwrap();
+    let shape2: Shape = nanojson::parse(&json).unwrap();
     assert_eq!(shape, shape2);
 }
 
 #[cfg(feature = "std")]
 #[test]
-fn test_measure_matches_to_string_len() {
+fn test_measure_matches_stringify_len() {
     let p = Point { x: 99, y: -1 };
-    let json = nanojson::to_string(&p).unwrap();
+    let json = nanojson::stringify(&p).unwrap();
     let measured = nanojson::measure(|s| p.serialize(s));
     assert_eq!(measured, json.len());
 }

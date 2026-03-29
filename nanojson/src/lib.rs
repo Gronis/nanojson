@@ -15,12 +15,12 @@ pub use write::{Write, SliceWriter, SizeCounter};
 pub use serialize::{Serializer, Serialize, SerializeError};
 pub use deserialize::{Parser, Deserialize};
 
-pub use serialize::{serialize, to_json, measure};
-pub use deserialize::{from_json};
+pub use serialize::{stringify_sized, stringify_manual_sized, measure};
+pub use deserialize::{parse_sized, parse_manual_sized};
 
 #[cfg(feature = "std")]
-pub use serialize::{to_string, serialize_to_string};
+pub use serialize::{stringify, stringify_manual};
 #[cfg(feature = "std")]
-pub use deserialize::{from_bytes, from_str, parse_dyn};
+pub use deserialize::{parse, parse_manual, parse_bytes};
 
 pub use nanojson_derive::{Deserialize, Serialize};

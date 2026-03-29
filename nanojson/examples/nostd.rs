@@ -16,7 +16,7 @@ struct MyStruct {
 fn main() {
     // Parse a JSON string into a struct
     let json = r#"{"num": 42, "name": "hello"}"#;
-    let my_struct = nanojson::from_json::<256, MyStruct>(json.as_bytes());
+    let my_struct = nanojson::parse_sized::<256, MyStruct>(json.as_bytes());
 
     if let Ok(my_struct) = my_struct {
         // Change the fields and turn back into a JSON string again
@@ -25,7 +25,7 @@ fn main() {
             name: StringBuf::try_from("world").unwrap(),
         };
 
-        if let Ok(json) = nanojson::to_string(&my_struct2) {
+        if let Ok(json) = nanojson::stringify(&my_struct2) {
             // Use panic! to print the parsed struct and the JSON string since
             // we are in no_std land
             panic!("Parsed: {my_struct:?}\nJSON: {json}");

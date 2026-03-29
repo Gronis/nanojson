@@ -547,9 +547,21 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<
 
 // ---- Convenience free functions ----
 
+pub fn parse_manual_sized<'s, const STR_BUF: usize, T>(
+    src: &[u8],
+    f: impl for<'a, 'b> FnOnce(&mut Parser<'a, 'b>) -> Result<T, ParseError>,
+) -> Result<T, ParseError>
+where
+    T: for<'b> Deserialize<'s, 'b>,
+{
+    let mut scratch = [0u8; STR_BUF];
+    let mut parser = Parser::new(src, scratch.as_mut_slice());
+    f(&mut parser)
+}
+
 /// Deserialize a `T: Deserialize` value with a stack-allocated scratch buffer of `STR_BUF` bytes.
 #[inline]
-pub fn from_json<'s, const STR_BUF: usize, T>(
+pub fn parse_sized<'s, const STR_BUF: usize, T>(
     src: &'s [u8],
 ) -> Result<T, ParseError>
 where
@@ -564,7 +576,7 @@ where
 /// for string decoding: a decoded string is never longer than its escaped form).
 #[cfg(feature = "std")]
 #[inline]
-pub fn from_bytes<T>(src: &[u8]) -> Result<T, ParseError>
+pub fn parse_bytes<T>(src: &[u8]) -> Result<T, ParseError>
 where
     T: for<'s, 'b> Deserialize<'s, 'b>,
 {
@@ -576,11 +588,11 @@ where
 /// The scratch buffer is auto-allocated; no size choice required.
 #[cfg(feature = "std")]
 #[inline]
-pub fn from_str<T>(src: &str) -> Result<T, ParseError>
+pub fn parse<T>(src: &str) -> Result<T, ParseError>
 where
     T: for<'s, 'b> Deserialize<'s, 'b>,
 {
-    from_bytes(src.as_bytes())
+    parse_bytes(src.as_bytes())
 }
 
 /// Drive the parser manually with an auto-sized heap-allocated scratch buffer.
@@ -588,7 +600,7 @@ where
 /// `T` must be a fully owned type (no borrows from the parser).
 #[cfg(feature = "std")]
 #[inline]
-pub fn parse_dyn<T>(
+pub fn parse_manual<T>(
     src: &[u8],
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a, 'b>) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {

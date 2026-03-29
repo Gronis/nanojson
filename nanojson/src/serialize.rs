@@ -404,7 +404,7 @@ impl Serialize for () {
 /// Serialize via closure into a stack-allocated `[u8; N]`.
 /// Returns `(buffer, bytes_written)`.
 #[inline]
-pub fn serialize<const N: usize>(
+pub fn stringify_manual_sized<const N: usize>(
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
 ) -> Result<([u8; N], usize), SerializeError<WriteError>> {
     let mut buf = [0u8; N];
@@ -417,10 +417,10 @@ pub fn serialize<const N: usize>(
 
 /// Serialize a `T: Serialize` value into a stack-allocated `[u8; N]` buffer.
 #[inline]
-pub fn to_json<const N: usize, T: Serialize>(
+pub fn stringify_sized<const N: usize, T: Serialize>(
     val: &T,
 ) -> Result<([u8; N], usize), SerializeError<WriteError>> {
-    serialize::<N>(|s| val.serialize(s))
+    stringify_manual_sized::<N>(|s| val.serialize(s))
 }
 
 /// Count the bytes that a closure would produce without writing anything.
@@ -439,10 +439,10 @@ pub fn measure(
 /// Only fails if nesting exceeds the default depth limit (32).
 #[cfg(feature = "std")]
 #[inline]
-pub fn to_string<T: Serialize>(
+pub fn stringify<T: Serialize>(
     val: &T,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
-    serialize_to_string(|s| val.serialize(s))
+    stringify_manual(|s| val.serialize(s))
 }
 
 /// Serialize via closure into a heap-allocated [`String`].
@@ -450,7 +450,7 @@ pub fn to_string<T: Serialize>(
 /// Only fails if nesting exceeds the default depth limit (32).
 #[cfg(feature = "std")]
 #[inline]
-pub fn serialize_to_string(
+pub fn stringify_manual(
     f: impl FnOnce(&mut Serializer<std::vec::Vec<u8>>) -> Result<(), SerializeError<core::convert::Infallible>>,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
     let mut ser: Serializer<_> = Serializer::new(std::vec::Vec::new());

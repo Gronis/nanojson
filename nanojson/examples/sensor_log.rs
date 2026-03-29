@@ -137,7 +137,7 @@ fn main() {
     // No buffer sizes to choose; heap grows as needed.
     // ==================================================================
 
-    let json = nanojson::serialize_to_string(|json| {
+    let json = nanojson::stringify_manual(|json| {
         json.array_begin()?;
 
         json.object_begin()?;
@@ -172,7 +172,7 @@ fn main() {
     let mut records: [Option<Record>; 8] = [const { None }; 8];
     let mut count = 0usize;
 
-    nanojson::parse_dyn(json.as_bytes(), |json| {
+    nanojson::parse_manual(json.as_bytes(), |json| {
         json.array_begin()?;
         while json.array_item()? {
             json.object_begin()?;
@@ -194,7 +194,7 @@ fn main() {
     std::println!("\n=== no_std tier ===");
 
     // Build the log into a 512-byte stack buffer.
-    let (log_buf, log_len) = nanojson::serialize::<512>(|json| {
+    let (log_buf, log_len) = nanojson::stringify_manual_sized::<512>(|json| {
         json.array_begin()?;
 
         json.object_begin()?;
