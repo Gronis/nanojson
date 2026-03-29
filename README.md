@@ -282,6 +282,7 @@ nanojson/
 - **No `serde` compatibility.** nanojson is its own trait ecosystem. If you need serde interop, use serde.
 - **Non-finite floats are an error.** Serializing `f32::NAN`, `f64::INFINITY`, etc. returns `SerializeError::InvalidValue`. JSON has no representation for these values.
 - **Nesting depth limit.** The serializer's `DEPTH` const generic (default 32) limits how deeply you can nest objects and arrays. Use `Serializer<W, 64>` directly for deeper structures.
+- **No tuple enum variants** Use `enum Kind { A { number: i32 } }` instead of `enum Kind { A(i32) }`
 
 ---
 
