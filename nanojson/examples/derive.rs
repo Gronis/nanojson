@@ -5,10 +5,10 @@
 //!
 //! Shows both API tiers:
 //!
-//! **`std` tier**: `nanojson::to_string` / `nanojson::from_str` — one-liners,
+//! **`std` tier**: `nanojson::stringify` / `nanojson::parse` — one-liners,
 //! no buffer choices.
 //!
-//! **`no_std` tier**: `nanojson::to_json::<N, _>` / `nanojson::from_json::<STR_BUF, _>` —
+//! **`no_std` tier**: `nanojson::stringify_sized::<N, _>` / `nanojson::parse_sized::<STR_BUF, _>` —
 //! all memory on the stack, caller picks sizes.
 
 extern crate std;
@@ -70,8 +70,8 @@ fn main() {
     // ----------------------------------------------------------------
     // no_std tier — stack-allocated buffers, explicit sizes
     //
-    // to_json::<N, _>  — N bytes for the output JSON.
-    // from_json::<S, _> — S bytes for the string-decode scratch buffer;
+    // stringify_sized::<N, _>  — N bytes for the output JSON.
+    // parse_sized::<S, _> — S bytes for the string-decode scratch buffer;
     //                     only needs to fit the longest single field value.
     // ----------------------------------------------------------------
 
@@ -142,5 +142,5 @@ fn main() {
     // ----------------------------------------------------------------
 
     let n = nanojson::measure(|s| entity.serialize(s));
-    std::println!("\nEntity serializes to {n} bytes — use to_json::<{n}, _> or larger.");
+    std::println!("\nEntity serializes to {n} bytes — use stringify_sized::<{n}, _> or larger.");
 }

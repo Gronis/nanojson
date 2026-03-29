@@ -460,7 +460,7 @@ fn test_unknown_field_in_nested_error() {
 // ============================================================
 
 #[test]
-fn test_stringify_sized_from_json_roundtrip() {
+fn test_stringify_sized_roundtrip() {
     let p = Point { x: 3, y: -7 };
     let (buf, len) = nanojson::stringify_sized::<128, _>(&p).unwrap();
     let p2: Point = nanojson::parse_sized::<64, _>(&buf[..len]).unwrap();
@@ -468,7 +468,7 @@ fn test_stringify_sized_from_json_roundtrip() {
 }
 
 #[test]
-fn test_serialize_closure_from_json() {
+fn test_stringify_manual_sized() {
     let (buf, len) = nanojson::stringify_manual_sized::<64>(|s| {
         s.object_begin()?;
         s.member_key("x")?; s.integer(10)?;

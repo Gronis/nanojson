@@ -139,7 +139,7 @@ fn main() {
     // ------------------------------------------------------------------
     // 2. Deep tree — exceeds the default Serializer depth of 32.
     //
-    //    `to_string` calls `val.serialize(&mut ser)` via the `Serialize`
+    //    `stringify` calls `val.serialize(&mut ser)` via the `Serialize`
     //    trait, which uses `Serializer<Vec<u8>, 32>`. Any structure more
     //    than 32 levels deep hits the stack limit and returns DepthExceeded.
     // ------------------------------------------------------------------

@@ -1,10 +1,10 @@
 extern crate std;
 use std::borrow::ToOwned;
 
-use crate::serialize::{Serializer, SerializeError, Serialize};
-use crate::deserialize::{Parser, Deserialize};
-use crate::write::SliceWriter;
-use crate::error::{ParseErrorKind, WriteError};
+use nanojson::{Serializer, SerializeError, Serialize};
+use nanojson::{Parser, Deserialize};
+use nanojson::SliceWriter;
+use nanojson::{ParseErrorKind, WriteError};
 
 // ============================================================
 // Helpers

@@ -12,7 +12,7 @@
 //!
 //! Shows both API tiers:
 //!
-//! **`std` tier**: `nanojson::serialize_to_string` / `nanojson::parse_dyn` for
+//! **`std` tier**: `nanojson::stringify` / `nanojson::parse_manual` for
 //! quick prototyping without buffer management.
 //!
 //! **`no_std` tier**: `nanojson::serialize::<N>` + `Parser::new` for the real
@@ -133,7 +133,7 @@ fn print_records(records: &[Option<Record>], count: usize) {
 
 fn main() {
     // ==================================================================
-    // std tier — serialize_to_string / parse_dyn
+    // std tier — stringify / parse_manual
     // No buffer sizes to choose; heap grows as needed.
     // ==================================================================
 

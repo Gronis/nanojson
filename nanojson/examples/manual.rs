@@ -2,7 +2,7 @@
 //!
 //! Shows both tiers of the API:
 //!
-//! **`std` tier** (`default`): `nanojson::serialize_to_string` / `nanojson::parse_dyn` —
+//! **`std` tier** (`default`): `nanojson::stringify` / `nanojson::parse_manual` —
 //! no buffer choices, heap grows as needed.
 //!
 //! **`no_std` tier**: `nanojson::serialize::<N>` / `nanojson::parse::<STR_BUF>` —

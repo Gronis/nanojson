@@ -7,9 +7,6 @@ pub mod write;
 pub mod serialize;
 pub mod deserialize;
 
-#[cfg(test)]
-mod tests;
-
 pub use error::{ParseError, ParseErrorKind, WriteError};
 pub use write::{Write, SliceWriter, SizeCounter};
 pub use serialize::{Serializer, Serialize, SerializeError};

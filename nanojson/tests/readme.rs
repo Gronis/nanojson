@@ -118,7 +118,7 @@ fn test_readme_impl() -> Result<(), Error> {
 
     // Size estimation
     let n = nanojson::measure(|s| entity.serialize(s));
-    // n is the exact byte count — use it to pick N in to_json / serialize.
+    // n is the exact byte count — use it to pick N in stringify_sized / parse_sized.
 
 
     // Derive macros

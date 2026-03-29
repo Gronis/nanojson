@@ -127,7 +127,7 @@ let (x, y) = nanojson::parse_manual_sized::<64, _>(json, |p| {
 
 ```rust
 let n = nanojson::measure(|s| entity.serialize(s));
-// n is the exact byte count — use it to pick N in to_json / serialize.
+// n is the exact byte count — use it to pick N in stringify_sized / parse_sized.
 ```
 
 ---
@@ -240,22 +240,26 @@ Parse errors are `ParseError { kind: ParseErrorKind, offset: usize }`. The `offs
 
 ```
 nanojson/
-├── Cargo.toml          workspace root
-├── nanojson/             core library (#![no_std], no dependencies)
+├── Cargo.toml                    workspace root
+├── nanojson/                     core library (#![no_std], no dependencies)
 │   ├── src/
 │   │   ├── lib.rs
-│   │   ├── write.rs    Write, SliceWriter, SizeCounter
-│   │   ├── serialize.rs  Serializer, SerializeError, Serialize
-│   │   ├── deserialize.rs  Parser, Deserialize
-│   │   └── error.rs
+│   │   ├── write.rs              Write, SliceWriter, SizeCounter
+│   │   ├── serialize.rs          Serializer, SerializeError, Serialize
+│   │   ├── deserialize.rs        Parser, Deserialize
+│   │   └── error.rs              Error types
 │   ├── examples/
-│   │   ├── manual.rs     hand-written serialize + parse (both tiers)
-│   │   ├── derive.rs     derive-macro workflow (both tiers)
-│   │   ├── sensor_log.rs embedded sensor log (both tiers)
-│   │   └── recursive.rs  recursive tree + depth-limit handling
+│   │   ├── simple.rs             simple derive example
+│   │   ├── nostd.rs              almost same as simple but no_std
+│   │   ├── manual.rs             hand-written serialize + parse (both tiers)
+│   │   ├── derive.rs             derive-macro workflow (both tiers)
+│   │   ├── sensor_log.rs         embedded sensor log (both tiers)
+│   │   └── recursive.rs          recursive tree + depth-limit handling
 │   └── tests/
-│       └── derive_roundtrip.rs  integration tests
-└── nanojson-derive/      proc-macro crate (no syn/quote/proc_macro2)
+│       ├── readme.rs             tests for README.md code
+│       ├── non_derive.rs         tests for manual parsing with derive trait
+│       └── derive_roundtrip.rs   integration tests
+└── nanojson-derive/              proc-macro crate (no syn/quote/proc_macro2)
 ```
 
 ---
@@ -265,7 +269,7 @@ nanojson/
 - **No heap.** Zero allocation from library code. You own every byte.
 - **`#![no_std]`.** Works in bare-metal firmware, bootloaders, and kernel modules.
 - **No external dependencies.** `nanojson` has none. `nanojson-derive` uses only the built-in `proc_macro` crate.
-- **Ergonomic `std` tier.** With the `std` feature (on by default), `to_string` / `from_str` / `from_bytes` eliminate buffer management entirely.
+- **Ergonomic `std` tier.** With the `std` feature (on by default), `parse` / `parse_bytes` / `stringify` eliminate buffer management entirely.
 - **Deterministic.** No dynamic dispatch, no RTTI, no surprise allocations under load.
 - **Zero-copy string parsing.** Strings without escape sequences are returned as `&'src str` slices directly into the input. Only escaped strings touch the scratch buffer.
 - **Byte-accurate errors.** `ParseError::offset` points to the exact byte where parsing failed.
@@ -278,7 +282,7 @@ nanojson/
 ## Limitations
 
 - **No `f64` serialization or parsing built in.** The library stays pure `core`. Write floats yourself via `ser.number_raw("3.14")`, and parse the raw `&str` returned by `number_str()` using whatever float parser you have available.
-- **No `String` or `Vec` in `no_std` mode.** All string data lives in user-supplied buffers. The `std` tier handles this automatically via `from_str` / `to_string`.
+- **No `String` or `Vec` in `no_std` mode.** All string data lives in user-supplied buffers. The `std` tier handles this automatically via `stringify` / `parse`.
 - **Scratch buffer is reused per string.** `Parser::string()` and `Parser::object_member()` both write into the same `&mut [u8]`. The returned `&str` is invalidated by the next string parse. Copy the value immediately if you need to keep it.
 - **No streaming / async.** The serializer writes synchronously to `Write`; the parser requires the entire input to be in memory at once.
 - **No `serde` compatibility.** nanojson is its own trait ecosystem. If you need serde interop, use serde.
