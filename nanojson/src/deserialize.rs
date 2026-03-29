@@ -41,17 +41,18 @@ impl Token {
 /// scratch buffer (`'buf`) for string unescaping.
 ///
 /// # Example
-/// ```ignore
-/// let mut str_buf = [0u8; 256];
-/// let mut parser = Parser::new(json_bytes, &mut str_buf);
-/// parser.object_begin()?;
-/// while let Some(key) = parser.object_member()? {
-///     match key {
-///         "name" => { let s = parser.string()?; }
-///         _ => return Err(parser.unknown_field()),
-///     }
+/// ```
+/// use nanojson::Parser;
+/// let src = b"[1, 2, 3]";
+/// let mut str_buf = [0u8; 16];
+/// let mut p = Parser::new(src, &mut str_buf);
+/// p.array_begin().unwrap();
+/// let mut sum = 0i64;
+/// while p.array_item().unwrap() {
+///     sum += p.number_str().unwrap().parse::<i64>().unwrap();
 /// }
-/// parser.object_end()?;
+/// p.array_end().unwrap();
+/// assert_eq!(sum, 6);
 /// ```
 pub struct Parser<'src, 'buf> {
     src: &'src [u8],
@@ -547,6 +548,25 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<
 
 // ---- Convenience free functions ----
 
+/// Parse using a hand-written closure with a stack-allocated scratch buffer of `STR_BUF` bytes.
+///
+/// # Example
+/// ```
+/// let (x, y) = nanojson::parse_manual_sized::<16, _>(b"{\"x\":3,\"y\":4}", |p| {
+///     p.object_begin()?;
+///     let mut x = 0i64; let mut y = 0i64;
+///     while let Some(k) = p.object_member()? {
+///         match k {
+///             "x" => x = p.number_str()?.parse().unwrap(),
+///             "y" => y = p.number_str()?.parse().unwrap(),
+///             _ => return Err(p.unknown_field()),
+///         }
+///     }
+///     p.object_end()?;
+///     Ok((x, y))
+/// }).unwrap();
+/// assert_eq!((x, y), (3, 4));
+/// ```
 pub fn parse_manual_sized<'s, const STR_BUF: usize, T>(
     src: &[u8],
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a, 'b>) -> Result<T, ParseError>,
@@ -557,6 +577,12 @@ pub fn parse_manual_sized<'s, const STR_BUF: usize, T>(
 }
 
 /// Deserialize a `T: Deserialize` value with a stack-allocated scratch buffer of `STR_BUF` bytes.
+///
+/// # Example
+/// ```
+/// let n: i64 = nanojson::parse_sized::<8, _>(b"42").unwrap();
+/// assert_eq!(n, 42);
+/// ```
 #[inline]
 pub fn parse_sized<'s, const STR_BUF: usize, T>(
     src: &'s [u8],
@@ -571,6 +597,12 @@ where
 /// Deserialize a fully-owned type from raw bytes.
 /// The scratch buffer is auto-allocated at `src.len()` bytes (safe upper bound
 /// for string decoding: a decoded string is never longer than its escaped form).
+///
+/// # Example
+/// ```
+/// let n: i64 = nanojson::parse_bytes(b"42").unwrap();
+/// assert_eq!(n, 42);
+/// ```
 #[cfg(feature = "std")]
 #[inline]
 pub fn parse_bytes<T>(src: &[u8]) -> Result<T, ParseError>
@@ -583,6 +615,12 @@ where
 
 /// Deserialize a fully-owned type from a `&str`.
 /// The scratch buffer is auto-allocated; no size choice required.
+///
+/// # Example
+/// ```
+/// let n: i64 = nanojson::parse("42").unwrap();
+/// assert_eq!(n, 42);
+/// ```
 #[cfg(feature = "std")]
 #[inline]
 pub fn parse<T>(src: &str) -> Result<T, ParseError>
@@ -595,6 +633,24 @@ where
 /// Drive the parser manually with an auto-sized heap-allocated scratch buffer.
 /// The scratch buffer is sized to `src.len()` (safe upper bound for string decoding).
 /// `T` must be a fully owned type (no borrows from the parser).
+///
+/// # Example
+/// ```
+/// let (x, y) = nanojson::parse_manual(b"{\"x\":3,\"y\":4}", |p| {
+///     p.object_begin()?;
+///     let mut x = 0i64; let mut y = 0i64;
+///     while let Some(k) = p.object_member()? {
+///         match k {
+///             "x" => x = p.number_str()?.parse().unwrap(),
+///             "y" => y = p.number_str()?.parse().unwrap(),
+///             _ => return Err(p.unknown_field()),
+///         }
+///     }
+///     p.object_end()?;
+///     Ok((x, y))
+/// }).unwrap();
+/// assert_eq!((x, y), (3, 4));
+/// ```
 #[cfg(feature = "std")]
 #[inline]
 pub fn parse_manual<T>(

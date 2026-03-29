@@ -18,13 +18,16 @@ struct Scope {
 /// JSON serializer. Generic over the write sink `W` and maximum nesting depth `DEPTH`.
 ///
 /// # Example
-/// ```ignore
-/// let mut buf = [0u8; 256];
+/// ```
+/// use nanojson::{Serializer, SliceWriter};
+/// let mut buf = [0u8; 64];
 /// let mut w = SliceWriter::new(&mut buf);
-/// let mut ser = Serializer::new(&mut w);
-/// ser.object_begin()?;
-///   ser.member_key("x")?; ser.integer(1)?;
-/// ser.object_end()?;
+/// let mut ser: Serializer<_, 32> = Serializer::new(&mut w);
+/// ser.object_begin().unwrap();
+/// ser.member_key("x").unwrap(); ser.integer(1).unwrap();
+/// ser.object_end().unwrap();
+/// drop(ser);
+/// assert_eq!(w.written(), b"{\"x\":1}");
 /// ```
 pub struct Serializer<W, const DEPTH: usize = 32> {
     writer: W,
@@ -403,6 +406,16 @@ impl Serialize for () {
 
 /// Serialize via closure into a stack-allocated `[u8; N]`.
 /// Returns `(buffer, bytes_written)`.
+///
+/// # Example
+/// ```
+/// let (buf, len) = nanojson::stringify_manual_sized::<32>(|s| {
+///     s.object_begin()?;
+///     s.member_key("n")?; s.integer(7)?;
+///     s.object_end()
+/// }).unwrap();
+/// assert_eq!(&buf[..len], b"{\"n\":7}");
+/// ```
 #[inline]
 pub fn stringify_manual_sized<const N: usize>(
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
@@ -416,6 +429,12 @@ pub fn stringify_manual_sized<const N: usize>(
 }
 
 /// Serialize a `T: Serialize` value into a stack-allocated `[u8; N]` buffer.
+///
+/// # Example
+/// ```
+/// let (buf, len) = nanojson::stringify_sized::<32, _>(&42i64).unwrap();
+/// assert_eq!(&buf[..len], b"42");
+/// ```
 #[inline]
 pub fn stringify_sized<const N: usize, T: Serialize>(
     val: &T,
@@ -425,6 +444,16 @@ pub fn stringify_sized<const N: usize, T: Serialize>(
 
 /// Count the bytes that a closure would produce without writing anything.
 /// Returns the byte count; returns 0 if `DepthExceeded` is hit.
+///
+/// # Example
+/// ```
+/// let n = nanojson::measure(|s| {
+///     s.object_begin()?;
+///     s.member_key("x")?; s.integer(1)?;
+///     s.object_end()
+/// });
+/// assert_eq!(n, 7); // {"x":1}
+/// ```
 #[inline]
 pub fn measure(
     f: impl FnOnce(&mut Serializer<&mut crate::write::SizeCounter>) -> Result<(), SerializeError<core::convert::Infallible>>,
@@ -437,6 +466,12 @@ pub fn measure(
 
 /// Serialize a value into a heap-allocated [`String`].
 /// Only fails if nesting exceeds the default depth limit (32).
+///
+/// # Example
+/// ```
+/// let json = nanojson::stringify(&[1i64, 2, 3]).unwrap();
+/// assert_eq!(json, "[1,2,3]");
+/// ```
 #[cfg(feature = "std")]
 #[inline]
 pub fn stringify<T: Serialize>(
@@ -448,6 +483,16 @@ pub fn stringify<T: Serialize>(
 /// Serialize via closure into a heap-allocated [`String`].
 /// The output buffer grows as needed; no size choice required.
 /// Only fails if nesting exceeds the default depth limit (32).
+///
+/// # Example
+/// ```
+/// let json = nanojson::stringify_manual(|s| {
+///     s.object_begin()?;
+///     s.member_key("x")?; s.integer(1)?;
+///     s.object_end()
+/// }).unwrap();
+/// assert_eq!(json, r#"{"x":1}"#);
+/// ```
 #[cfg(feature = "std")]
 #[inline]
 pub fn stringify_manual(
