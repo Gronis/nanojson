@@ -107,11 +107,11 @@ fn test_strings() {
 
 #[test]
 fn test_string_all_control_escapes() {
-    // \b \t \n \v \f \r
+    // \b \t \n \f \r — note: \v (0x0B) is not a valid JSON escape, must use \u000b
     assert_eq!(ser!(|j| j.string_bytes(&[0x08])), "\"\\b\"");
     assert_eq!(ser!(|j| j.string_bytes(&[0x09])), "\"\\t\"");
     assert_eq!(ser!(|j| j.string_bytes(&[0x0A])), "\"\\n\"");
-    assert_eq!(ser!(|j| j.string_bytes(&[0x0B])), "\"\\v\"");
+    assert_eq!(ser!(|j| j.string_bytes(&[0x0B])), "\"\\u000b\"");
     assert_eq!(ser!(|j| j.string_bytes(&[0x0C])), "\"\\f\"");
     assert_eq!(ser!(|j| j.string_bytes(&[0x0D])), "\"\\r\"");
     // Low non-printable bytes → \u00XX

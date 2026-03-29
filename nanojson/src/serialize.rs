@@ -246,7 +246,7 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
                 0x08  => { self.write(b"\\b")?;  i += 1; }
                 0x09  => { self.write(b"\\t")?;  i += 1; }
                 0x0A  => { self.write(b"\\n")?;  i += 1; }
-                0x0B  => { self.write(b"\\v")?;  i += 1; }
+                0x0B  => { self.escape_byte(ch)?;  i += 1; }
                 0x0C  => { self.write(b"\\f")?;  i += 1; }
                 0x0D  => { self.write(b"\\r")?;  i += 1; }
                 0x20..=0x7E => {
@@ -798,19 +798,20 @@ pub fn stringify_manual_pretty(
 #[cfg(feature = "std")]
 #[test]
 fn outputs_invalid_utf8_for_malformed_sequence() {
-    let input = [0xE2, 0x28, 0xA1]; // invalid UTF-8
+    // 0xE2 starts a 3-byte sequence, but 0x28 ('(') is not a continuation byte.
+    // 0xA1 is a lone continuation byte.  Both non-ASCII bytes must be \uXXXX-escaped.
+    let input = [0xE2u8, 0x28, 0xA1];
 
-    let mut out = [0u8; 16];
-    let mut w = super::SliceWriter::new(&mut out);
-    {
-        let mut ser = Serializer::<_, 16>::new(&mut w);
-        ser.write_string_escaped(&input).unwrap();
-    }
+    let json = stringify_manual(|s| s.string_bytes(&input)).unwrap();
+    let ans = r#""\u00e2(\u00a1""#;
+    assert_eq!(json, ans);
+    assert!(std::str::from_utf8(json.as_bytes()).is_ok(),
+        "Output is not valid UTF-8: {:?}", json);
+}
 
-    // This SHOULD be valid UTF-8 if escaping worked correctly
-    assert!(
-        std::str::from_utf8(&out).is_ok(),
-        "Output is not valid UTF-8: {:?}",
-        out
-    );
+#[test]
+fn escapes_vertical_tab_as_unicode() {
+    // \v (0x0B) is not a valid JSON escape; must be emitted as \u000b.
+    let (json, len) = stringify_manual_sized::<16>(|s| s.string_bytes(&[0x0B])).unwrap();
+    assert_eq!(&json[..len], r#""\u000b""#.as_bytes());
 }
