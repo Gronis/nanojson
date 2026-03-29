@@ -9,26 +9,26 @@ struct StringArray<const N: usize> {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct MyStruct {
-    num: i32,
+    num: f32,
     name: StringArray<32>,
 }
 
 fn main() {
     // Parse a JSON string into a struct
-    let json = r#"{"num": 42, "name": "hello"}"#;
+    let json = r#"{"num": 42.3, "name": "hello"}"#;
     let my_struct = nanojson::parse_sized::<256, MyStruct>(json.as_bytes());
 
     if let Ok(my_struct) = my_struct {
         // Change the fields and turn back into a JSON string again
         let my_struct2 = MyStruct {
-            num: 420,
+            num: 420.3,
             name: StringArray::try_from("world").unwrap(),
         };
 
-        if let Ok(json) = nanojson::stringify(&my_struct2) {
+        if let Ok((buff, len)) = nanojson::stringify_sized::<256, _>(&my_struct2) {
             // Use panic! to print the parsed struct and the JSON string since
             // we are in no_std land
-            panic!("Parsed: {my_struct:?}\nJSON: {json}");
+            panic!("Parsed: {my_struct:?}\nJSON: {}", core::str::from_utf8(&buff[..len]).unwrap());
         }
     }
 }
