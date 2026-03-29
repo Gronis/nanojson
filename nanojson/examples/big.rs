@@ -152,7 +152,7 @@ fn main() {
     // Serialize
     // ------------------------------------------------------------
 
-    let json = nanojson::stringify_pretty(&state, 2).unwrap();
+    let json = nanojson::stringify_pretty(2, &state).unwrap();
     std::println!("AppState JSON:\n{json}");
 
     // ------------------------------------------------------------

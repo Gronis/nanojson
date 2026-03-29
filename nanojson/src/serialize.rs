@@ -774,8 +774,8 @@ pub fn stringify_manual(
 #[cfg(feature = "std")]
 #[inline]
 pub fn stringify_pretty<T: Serialize>(
-    val: &T,
     indent: usize,
+    val: &T,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
     stringify_manual_pretty(indent, |s| val.serialize(s))
 }

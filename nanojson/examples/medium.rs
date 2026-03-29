@@ -157,7 +157,7 @@ fn main() {
     // Serialize
     // ------------------------------------------------------------
 
-    let json = nanojson::stringify_pretty(&forum, 2).unwrap();
+    let json = nanojson::stringify_pretty(2, &forum).unwrap();
     std::println!("Forum JSON:\n{json}");
 
     // ------------------------------------------------------------
