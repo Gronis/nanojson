@@ -219,16 +219,8 @@ let json = nanojson::stringify_manual_sized_pretty(&mut buf, 2, |s| { ... })?;
 
 ## Error handling
 
-Serialization errors are `SerializeError<W::Error>`:
-
-| Variant | Meaning |
-|---|---|
-| `SerializeError::Write(e)` | Write error from the sink (e.g. `WriteError::BufferFull` from `SliceWriter`) |
-| `SerializeError::DepthExceeded` | Nesting exceeded the `DEPTH` const generic (default 32) |
-| `SerializeError::InvalidState` | `member_key` called outside an object or twice without an intervening value |
-| `SerializeError::InvalidUtf8(offset)` | Final string isn't utf-8 compatible. This indicates a serialization bug |
-
-Parse errors are `ParseError { kind: ParseErrorKind, offset: usize }`. The `offset` is a byte position in the source slice.
+### Parse errors are `ParseError { kind: ParseErrorKind, offset: usize }`. 
+The `offset` is a byte position in the source slice.
 
 | Kind | Meaning |
 |---|---|
@@ -239,6 +231,29 @@ Parse errors are `ParseError { kind: ParseErrorKind, offset: usize }`. The `offs
 | `InvalidUtf8` | String content is not valid UTF-8 after unescaping |
 | `UnknownField { type_name, expected_fields }` | Key not recognised by the deserializer |
 | `MissingField { field }` | A required `field` was absent (used by derived code) |
+
+Parse error can be printed with a nice looking error message like so:
+
+```rust
+match nanojson::parse::<MyStruct>(json) {
+    Err(err) =>  err.print(json),
+    _        => { ... }
+}
+```
+```txt
+27 |    "not_a_valid_field": {},
+   |    ^
+   |    unknown field in `Inventory`, expected one of: `items`, `metadata`
+```
+
+### Serialization errors are `SerializeError<W::Error>`:
+
+| Variant | Meaning |
+|---|---|
+| `Write(e)` | Write error from the sink (e.g. `WriteError::BufferFull` from `SliceWriter`) |
+| `DepthExceeded` | Nesting exceeded the `DEPTH` const generic (default 32) |
+| `InvalidState` | `member_key` called outside an object or twice without an intervening value |
+| `InvalidUtf8(offset)` | Final string isn't utf-8 compatible. This indicates a serialization bug |
 
 ---
 
