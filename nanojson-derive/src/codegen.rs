@@ -216,9 +216,10 @@ fn gen_deserialize_struct(name: &str, fields: &[ParsedField]) -> Result<String, 
     code.push_str(&format!("::core::result::Result::Ok({name} {{"));
     for f in fields {
         let fname = &f.name;
+        let jname = escape_rust_str(&f.json_name);
         code.push_str(&format!(
             "{fname}: {fname}.ok_or_else(|| ::nanojson::ParseError {{ \
-                kind: ::nanojson::ParseErrorKind::MissingField, \
+                kind: ::nanojson::ParseErrorKind::MissingField {{ field: {jname} }}, \
                 offset: __json.error_offset() \
             }})?,"
         ));
@@ -282,7 +283,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
         code.push_str("} else {");
         code.push_str(&format!(
             "return ::core::result::Result::Err(::nanojson::ParseError {{ \
-                kind: ::nanojson::ParseErrorKind::MissingField, \
+                kind: ::nanojson::ParseErrorKind::MissingField {{ field: \"(variant)\" }}, \
                 offset: __json.error_offset() \
             }});"
         ));
@@ -326,9 +327,10 @@ fn gen_deserialize_struct_variant(
     code.push_str(&format!("{enum_name}::{variant_name} {{"));
     for f in fields {
         let fname = &f.name;
+        let jname = escape_rust_str(&f.json_name);
         code.push_str(&format!(
             "{fname}: {fname}.ok_or_else(|| ::nanojson::ParseError {{ \
-                kind: ::nanojson::ParseErrorKind::MissingField, \
+                kind: ::nanojson::ParseErrorKind::MissingField {{ field: {jname} }}, \
                 offset: __json.error_offset() \
             }})?,"
         ));

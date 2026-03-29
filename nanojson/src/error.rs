@@ -23,7 +23,7 @@ pub enum ParseErrorKind {
     StringBufferOverflow,
     InvalidUtf8,
     UnknownField,
-    MissingField,
+    MissingField { field: &'static str },
 }
 
 impl ParseError {
@@ -56,8 +56,8 @@ impl core::fmt::Display for ParseErrorKind {
                 f.write_str("invalid UTF-8 in string"),
             ParseErrorKind::UnknownField =>
                 f.write_str("unknown field"),
-            ParseErrorKind::MissingField =>
-                f.write_str("missing required field"),
+            ParseErrorKind::MissingField { field } =>
+                write!(f, "missing required field `{field}`"),
         }
     }
 }

@@ -414,7 +414,7 @@ fn test_missing_field_error() {
     let result = Point::deserialize(&mut json);
     assert!(matches!(
         result,
-        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField, .. })
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField { .. }, .. })
     ));
 }
 
@@ -439,7 +439,7 @@ fn test_missing_nested_field_error() {
     let result = Person::deserialize(&mut json);
     assert!(matches!(
         result,
-        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField, .. })
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField { .. }, .. })
     ));
 }
 
@@ -653,7 +653,7 @@ fn test_error_offset_missing_field() {
     let mut buf = [0u8; 64];
     let mut json = Parser::new(src, &mut buf);
     let err = Point::deserialize(&mut json).unwrap_err();
-    assert!(matches!(err.kind, nanojson::ParseErrorKind::MissingField));
+    assert!(matches!(err.kind, nanojson::ParseErrorKind::MissingField { .. }));
     // The error offset must be a valid byte position within src.
     assert!(err.offset <= src.len(), "offset {} out of bounds", err.offset);
 }
@@ -666,7 +666,7 @@ fn test_empty_object_missing_all_fields_error() {
     let result = Point::deserialize(&mut json);
     assert!(matches!(
         result,
-        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField, .. })
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField { .. }, .. })
     ));
 }
 

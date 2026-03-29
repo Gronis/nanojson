@@ -58,6 +58,9 @@ pub struct Parser<'src, 'buf> {
     src: &'src [u8],
     pos: usize,
     token_start: usize,
+    /// Start of the most recently parsed object member key (the opening `"`).
+    /// Used by [`Parser::unknown_field`] to point at the key, not the colon.
+    key_start: usize,
 
     str_buf: &'buf mut [u8],
     str_len: usize,
@@ -74,6 +77,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
             src,
             pos: 0,
             token_start: 0,
+            key_start: 0,
             str_buf,
             str_len: 0,
             token: Token::Invalid,
@@ -293,6 +297,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
             Token::Comma => {
                 // Subsequent member: expect key
                 self.get_and_expect(Token::String)?;
+                self.key_start = self.token_start; // capture before colon advances token_start
                 self.get_and_expect(Token::Colon)?;
                 let s = self.current_string()?;
                 // SAFETY: we need to return a &str whose lifetime is tied to
@@ -307,7 +312,8 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                 Ok(None)
             }
             Token::String => {
-                // First member
+                // First member — token_start already points at the opening `"`
+                self.key_start = self.token_start; // capture before colon advances token_start
                 self.get_and_expect(Token::Colon)?;
                 let s = self.current_string()?;
                 let s: &'buf str = unsafe { core::mem::transmute(s) };
@@ -331,7 +337,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// Returns an `UnknownField` error at the current position.
     /// Call this inside the `_` arm of your `object_member` match.
     pub fn unknown_field(&self) -> ParseError {
-        ParseError::at(self.token_start, ParseErrorKind::UnknownField)
+        ParseError::at(self.key_start, ParseErrorKind::UnknownField)
     }
 
     /// Parse `[`.
