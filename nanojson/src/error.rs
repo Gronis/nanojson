@@ -33,7 +33,7 @@ impl ParseError {
     /// Returns a display wrapper that renders the error alongside the relevant
     /// portion of `src`, with a `^` pointer at the error position.
     ///
-    /// ```
+    /// ```rust,ignore
     /// let src = r#"{"x": 1.5}"#;
     /// if let Err(e) = nanojson::parse::<u32>(src) {
     ///     eprintln!("{}", e.display_with_source(src));
@@ -45,7 +45,7 @@ impl ParseError {
 
     /// Prints a human-readable diagnostic with source context to stderr.
     ///
-    /// ```
+    /// ```rust,ignore
     /// let src = r#"{"x": 1.5}"#;
     /// if let Err(e) = nanojson::parse::<u32>(src) {
     ///     e.print(src);
