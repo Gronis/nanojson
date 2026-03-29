@@ -94,7 +94,7 @@ fn test_readme_impl() -> Result<(), Error> {
     })?;
 
     // Deserialization
-    let json = r#"{"id":42,"is_active":true,"position":{"x":0,"y":0},"health":100}"#.as_bytes();
+    let json = r#"{"id":42,"is_active":true,"position":{},"health":100}"#.as_bytes();
     // One-liner for a derived type (STR_BUF = 64)
     let entity: Entity = nanojson::parse_sized(json, &mut [0; 64])?;
 
@@ -127,7 +127,9 @@ fn test_readme_impl() -> Result<(), Error> {
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     struct Vec2 {
-        x: i64,
+        #[nanojson(default)] // Allow member to be default initialized if
+        x: i64,              // omitted during parsing.
+        #[nanojson(default)]
         y: i64,
     }
 

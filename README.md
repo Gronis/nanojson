@@ -33,7 +33,9 @@ use nanojson::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Vec2 {
-    x: i64,
+    #[nanojson(default)] // Allow member to be default initialized if 
+    x: i64,              // omitted during parsing. 
+    #[nanojson(default)]
     y: i64,
 }
 
