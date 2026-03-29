@@ -1,7 +1,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WriteError {
     BufferFull,
-    DepthExceeded,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -159,8 +158,7 @@ impl core::fmt::Display for ParseErrorDisplay<'_> {
 impl core::fmt::Display for WriteError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            WriteError::BufferFull    => f.write_str("output buffer is full"),
-            WriteError::DepthExceeded => f.write_str("nesting depth exceeded"),
+            WriteError::BufferFull => f.write_str("output buffer is full"),
         }
     }
 }

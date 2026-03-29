@@ -1502,3 +1502,47 @@ fn test_arraystring_roundtrip() {
     let back: arrayvec::ArrayString<16> = nanojson::parse(&json).unwrap();
     assert_eq!(src, back);
 }
+
+// ============================================================
+// ---- u64 / i128 / u128 serialize (correctness fixes) ----
+// ============================================================
+
+#[test]
+fn test_u64_large_values() {
+    // Values that would wrap/corrupt if cast to i64
+    assert_eq!(ser!(|s| u64::MAX.serialize(s)), "18446744073709551615");
+    assert_eq!(ser!(|s| (i64::MAX as u64 + 1).serialize(s)), "9223372036854775808");
+    assert_eq!(ser!(|s| 0u64.serialize(s)), "0");
+}
+
+#[test]
+fn test_i128_serialize() {
+    assert_eq!(ser!(|s| 0i128.serialize(s)),       "0");
+    assert_eq!(ser!(|s| i128::MAX.serialize(s)),   "170141183460469231731687303715884105727");
+    assert_eq!(ser!(|s| i128::MIN.serialize(s)),   "-170141183460469231731687303715884105728");
+    assert_eq!(ser!(|s| (-1i128).serialize(s)),    "-1");
+}
+
+#[test]
+fn test_u128_serialize() {
+    assert_eq!(ser!(|s| 0u128.serialize(s)),     "0");
+    assert_eq!(ser!(|s| u128::MAX.serialize(s)), "340282366920938463463374607431768211455");
+}
+
+#[test]
+fn test_i128_roundtrip() {
+    for v in [0i128, 1, -1, i128::MAX, i128::MIN, 1_000_000_000_000_000_000_000i128] {
+        let json = nanojson::stringify(&v).unwrap();
+        let back: i128 = nanojson::parse(&json).unwrap();
+        assert_eq!(v, back, "roundtrip failed for {v}");
+    }
+}
+
+#[test]
+fn test_u128_roundtrip() {
+    for v in [0u128, 1, u128::MAX, u64::MAX as u128 + 1] {
+        let json = nanojson::stringify(&v).unwrap();
+        let back: u128 = nanojson::parse(&json).unwrap();
+        assert_eq!(v, back, "roundtrip failed for {v}");
+    }
+}

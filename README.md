@@ -91,6 +91,18 @@ assert_eq!(entity, entity2);
 
 ---
 
+## Feature tiers
+
+| Feature | Enables |
+|---|---|
+| *(none)* | Core no_std/no_alloc tier: `parse_sized`, `stringify_sized`, fixed-size arrays, all primitives including `f32`/`f64` |
+| `alloc` | `String`, `Vec<T>`, `Box<T>`, `BTreeMap<String, V>` |
+| `std` *(default)* | Everything in `alloc` plus `HashMap<String, V>`, `stringify`/`parse` convenience functions |
+| `derive` *(default)* | `#[derive(Serialize, Deserialize)]` macros |
+| `arrayvec` | `ArrayVec<T, N>` and `ArrayString<N>` from the [`arrayvec`](https://docs.rs/arrayvec) crate |
+
+---
+
 ## Two API tiers
 
 ### `std` tier (default feature)
@@ -271,12 +283,10 @@ nanojson/
 
 ## Limitations
 
-- **No `f64` serialization or parsing built in.** The library stays pure `core`. Write floats yourself via `ser.number_raw("3.14")`, and parse the raw `&str` returned by `number_str()` using whatever float parser you have available.
-- **No `String` or `Vec` in `no_std` mode.** All string data lives in user-supplied buffers. The `std` tier handles this automatically via `stringify` / `parse`.
 - **Scratch buffer is reused per string.** `Parser::string()` and `Parser::object_member()` both write into the same `&mut [u8]`. The returned `&str` is invalidated by the next string parse. Copy the value immediately if you need to keep it.
 - **No streaming / async.** The serializer writes synchronously to `Write`; the parser requires the entire input to be in memory at once.
 - **No `serde` compatibility.** nanojson is its own trait ecosystem. If you need serde interop, use serde.
-- **Unsigned integers above `i64::MAX`.** `Serialize` for unsigned types casts to `i64`. Values that exceed `i64::MAX` wrap. Use `ser.number_raw(...)` for full `u64` range.
+- **Non-finite floats are an error.** Serializing `f32::NAN`, `f64::INFINITY`, etc. returns `SerializeError::InvalidValue`. JSON has no representation for these values.
 - **Nesting depth limit.** The serializer's `DEPTH` const generic (default 32) limits how deeply you can nest objects and arrays. Use `Serializer<W, 64>` directly for deeper structures.
 
 ---

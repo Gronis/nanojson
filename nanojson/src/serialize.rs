@@ -207,6 +207,34 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
         self.write(&buf[i..])
     }
 
+    fn write_u128_raw(&mut self, x: u128) -> Result<(), SerializeError<W::Error>> {
+        if x == 0 {
+            return self.write(b"0");
+        }
+        let mut buf = [0u8; 39]; // u128::MAX has 39 decimal digits
+        let mut i = 39usize;
+        let mut n = x;
+        while n > 0 {
+            i -= 1;
+            buf[i] = b'0' + (n % 10) as u8;
+            n /= 10;
+        }
+        self.write(&buf[i..])
+    }
+
+    fn write_i128_raw(&mut self, x: i128) -> Result<(), SerializeError<W::Error>> {
+        if x < 0 {
+            self.write(b"-")?;
+            let u = if x == i128::MIN {
+                (i128::MAX as u128) + 1
+            } else {
+                (-x) as u128
+            };
+            return self.write_u128_raw(u);
+        }
+        self.write_u128_raw(x as u128)
+    }
+
     fn write_string_escaped(&mut self, bytes: &[u8]) -> Result<(), SerializeError<W::Error>> {
         self.write(b"\"")?;
         let mut i = 0;
@@ -271,6 +299,27 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
     pub fn integer(&mut self, v: i64) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
         self.write_integer_raw(v)?;
+        self.element_end();
+        Ok(())
+    }
+
+    pub fn unsigned(&mut self, v: u64) -> Result<(), SerializeError<W::Error>> {
+        self.element_begin()?;
+        self.write_u64_raw(v)?;
+        self.element_end();
+        Ok(())
+    }
+
+    pub fn integer128(&mut self, v: i128) -> Result<(), SerializeError<W::Error>> {
+        self.element_begin()?;
+        self.write_i128_raw(v)?;
+        self.element_end();
+        Ok(())
+    }
+
+    pub fn unsigned128(&mut self, v: u128) -> Result<(), SerializeError<W::Error>> {
+        self.element_begin()?;
+        self.write_u128_raw(v)?;
         self.element_end();
         Ok(())
     }
@@ -371,7 +420,35 @@ macro_rules! impl_integer {
         }
     )*};
 }
-impl_integer!(i8, i16, i32, i64, u8, u16, u32, u64, isize, usize);
+impl_integer!(i8, i16, i32, i64, u8, u16, u32);
+
+// i64 and isize go through integer() too, but the macro cast is fine for signed values.
+// u64 and usize need unsigned() to avoid silent truncation of values > i64::MAX.
+impl Serialize for u64 {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.unsigned(*self)
+    }
+}
+impl Serialize for usize {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.unsigned(*self as u64)
+    }
+}
+impl Serialize for isize {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.integer(*self as i64)
+    }
+}
+impl Serialize for i128 {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.integer128(*self)
+    }
+}
+impl Serialize for u128 {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.unsigned128(*self)
+    }
+}
 
 impl Serialize for str {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
