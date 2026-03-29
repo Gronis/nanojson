@@ -1,6 +1,6 @@
 [package]
 name = "nanojson"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "A #![no_std], allocation-free, zero-dependency JSON serializer and pull-parser."
 license = "MIT"
