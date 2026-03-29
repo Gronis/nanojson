@@ -33,6 +33,10 @@ name = "simple"
 required-features = ["derive", "std"]
 
 [[example]]
+name = "medium"
+required-features = ["derive", "std"]
+
+[[example]]
 name = "nostd"
 required-features = ["derive"]
 
