@@ -69,6 +69,17 @@ pub struct ParseErrorDisplay<'a> {
 
 impl core::fmt::Display for ParseErrorDisplay<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // Visual column after expanding tabs to 4-space tab stops.
+        fn visual_width(s: &str) -> usize {
+            s.chars().fold(0, |acc, c| if c == '\t' { (acc / 4 + 1) * 4 } else { acc + 1 })
+        }
+        fn count_digits(mut n: usize) -> usize {
+            if n == 0 { return 1; }
+            let mut d = 0;
+            while n > 0 { d += 1; n /= 10; }
+            d
+        }
+
         let src = self.src;
         let offset = self.error.offset.min(src.len());
         let bytes = src.as_bytes();
@@ -83,41 +94,63 @@ impl core::fmt::Display for ParseErrorDisplay<'_> {
             .position(|&b| b == b'\n')
             .map_or(src.len(), |p| offset + p);
 
-        let line = &src[line_start..line_end];
+        // Strip Windows \r from line end.
+        let raw_line = &src[line_start..line_end];
+        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
 
-        // Column (in chars) of the error within this line.
-        let col = src[line_start..offset].chars().count();
-        let total_chars = line.chars().count();
+        // 1-based line number.
+        let line_number = bytes[..line_start].iter().filter(|&&b| b == b'\n').count() + 1;
 
-        // Window of at most MAX_WIDTH chars centered on the error.
+        // Visual column of the error (tab-aware) and total visual width of the line.
+        let visual_col   = visual_width(&src[line_start..offset]);
+        let total_visual = visual_width(line);
+
+        // Window of at most MAX_WIDTH visual columns centered on the error.
         const MAX_WIDTH: usize = 80;
-        let (win_start, win_end) = if total_chars <= MAX_WIDTH {
-            (0, total_chars)
+        let (win_start, win_end) = if total_visual <= MAX_WIDTH {
+            (0, total_visual)
         } else {
-            let s = col.saturating_sub(MAX_WIDTH / 2);
-            let e = (s + MAX_WIDTH).min(total_chars);
+            let s = visual_col.saturating_sub(MAX_WIDTH / 2);
+            let e = (s + MAX_WIDTH).min(total_visual);
             (s, e)
         };
 
         let left_dots  = win_start > 0;
-        let right_dots = win_end < total_chars;
+        let right_dots = win_end < total_visual;
 
-        // Write the (possibly-trimmed) source line.
+        // Source line with gutter: "10 | {snippet}"
+        let digits = count_digits(line_number);
+        write!(f, "{} | ", line_number)?;
         if left_dots { f.write_str("...")?; }
-        for (i, c) in line.chars().enumerate() {
-            if i >= win_end { break; }
-            if i >= win_start { write!(f, "{c}")?; }
+        let mut vis = 0usize;
+        for c in line.chars() {
+            if vis >= win_end { break; }
+            let w = if c == '\t' { (vis / 4 + 1) * 4 - vis } else { 1 };
+            if vis >= win_start {
+                if c == '\t' {
+                    for _ in 0..w { f.write_str(" ")?; }
+                } else {
+                    write!(f, "{c}")?;
+                }
+            }
+            vis += w;
         }
         if right_dots { f.write_str("...")?; }
         writeln!(f)?;
 
-        // Pointer: chars before error in the window, plus "..." prefix width.
-        let pointer = (col - win_start) + if left_dots { 3 } else { 0 };
-        for _ in 0..pointer { f.write_str(" ")?; }
+        // Column of the pointer within the displayed snippet.
+        let col_in_window = (visual_col - win_start) + if left_dots { 3 } else { 0 };
+
+        // Pointer line: "   |         ^"
+        for _ in 0..digits { f.write_str(" ")?; }
+        f.write_str(" | ")?;
+        for _ in 0..col_in_window { f.write_str(" ")?; }
         writeln!(f, "^")?;
 
-        // Error description aligned under the pointer.
-        for _ in 0..pointer { f.write_str(" ")?; }
+        // Error message: "   |         expected ..."
+        for _ in 0..digits { f.write_str(" ")?; }
+        f.write_str(" | ")?;
+        for _ in 0..col_in_window { f.write_str(" ")?; }
         write!(f, "{}", self.error.kind)
     }
 }

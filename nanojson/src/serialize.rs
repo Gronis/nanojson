@@ -460,6 +460,50 @@ pub fn stringify_sized<const N: usize, T: Serialize>(
     stringify_manual_sized::<N>(|s| val.serialize(s))
 }
 
+/// Serialize via closure into a stack-allocated `[u8; N]` buffer with pretty-printing.
+///
+/// # Example
+/// ```
+/// let (buf, len) = nanojson::stringify_manual_sized_pretty::<64>(2, |s| {
+///     s.object_begin()?;
+///     s.member_key("x")?; s.integer(1)?;
+///     s.object_end()
+/// }).unwrap();
+/// assert_eq!(&buf[..len], b"{\n  \"x\": 1\n}");
+/// ```
+#[inline]
+pub fn stringify_manual_sized_pretty<const N: usize>(
+    indent: usize,
+    f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
+) -> Result<([u8; N], usize), SerializeError<WriteError>> {
+    let mut buf = [0u8; N];
+    let mut w = crate::write::SliceWriter::new(&mut buf);
+    let mut ser = Serializer::with_pp(&mut w, indent);
+    f(&mut ser)?;
+    let len = w.pos();
+    Ok((buf, len))
+}
+
+/// Serialize a `T: Serialize` value into a stack-allocated `[u8; N]` buffer with pretty-printing.
+///
+/// # Example
+/// ```
+/// # use nanojson::Serialize;
+/// # #[cfg(feature = "derive")] {
+/// #[derive(nanojson::Serialize)]
+/// struct Point { x: i64, y: i64 }
+/// let (buf, len) = nanojson::stringify_sized_pretty::<64, _>(&Point { x: 1, y: 2 }, 2).unwrap();
+/// assert_eq!(&buf[..len], b"{\n  \"x\": 1,\n  \"y\": 2\n}");
+/// # }
+/// ```
+#[inline]
+pub fn stringify_sized_pretty<const N: usize, T: Serialize>(
+    val: &T,
+    indent: usize,
+) -> Result<([u8; N], usize), SerializeError<WriteError>> {
+    stringify_manual_sized_pretty::<N>(indent, |s| val.serialize(s))
+}
+
 /// Count the bytes that a closure would produce without writing anything.
 /// Returns the byte count; returns 0 if `DepthExceeded` is hit.
 ///
@@ -517,6 +561,48 @@ pub fn stringify_manual(
     f: impl FnOnce(&mut Serializer<std::vec::Vec<u8>>) -> Result<(), SerializeError<core::convert::Infallible>>,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
     let mut ser: Serializer<_> = Serializer::new(std::vec::Vec::new());
+    f(&mut ser)?;
+    let vec = ser.into_writer();
+    // SAFETY: the serializer only writes valid JSON, which is always valid UTF-8.
+    Ok(unsafe { std::string::String::from_utf8_unchecked(vec) })
+}
+
+/// Serialize a value into a pretty-printed heap-allocated [`String`].
+/// Only fails if nesting exceeds the default depth limit (32).
+///
+/// # Example
+/// ```
+/// let json = nanojson::stringify_pretty(&[1i64, 2, 3], 2).unwrap();
+/// assert_eq!(json, "[\n  1,\n  2,\n  3\n]");
+/// ```
+#[cfg(feature = "std")]
+#[inline]
+pub fn stringify_pretty<T: Serialize>(
+    val: &T,
+    indent: usize,
+) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
+    stringify_manual_pretty(indent, |s| val.serialize(s))
+}
+
+/// Serialize via closure into a pretty-printed heap-allocated [`String`].
+/// Only fails if nesting exceeds the default depth limit (32).
+///
+/// # Example
+/// ```
+/// let json = nanojson::stringify_manual_pretty(2, |s| {
+///     s.object_begin()?;
+///     s.member_key("x")?; s.integer(1)?;
+///     s.object_end()
+/// }).unwrap();
+/// assert_eq!(json, "{\n  \"x\": 1\n}");
+/// ```
+#[cfg(feature = "std")]
+#[inline]
+pub fn stringify_manual_pretty(
+    indent: usize,
+    f: impl FnOnce(&mut Serializer<std::vec::Vec<u8>>) -> Result<(), SerializeError<core::convert::Infallible>>,
+) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
+    let mut ser: Serializer<_> = Serializer::with_pp(std::vec::Vec::new(), indent);
     f(&mut ser)?;
     let vec = ser.into_writer();
     // SAFETY: the serializer only writes valid JSON, which is always valid UTF-8.

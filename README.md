@@ -195,10 +195,16 @@ let n = nanojson::measure(|s| entity.serialize(s));
 
 ## Pretty-printing
 
+Pass an indent width to the `_pretty` variants of any serialization function:
+
 ```rust
-// Low-level — use Serializer::with_pp directly:
-let mut w = SliceWriter::new(&mut buf);
-let mut ser: Serializer<_, 16> = Serializer::with_pp(&mut w, 2); // 2-space indent
+// std tier
+let json = nanojson::stringify_pretty(&entity, 2)?;
+let json = nanojson::stringify_manual_pretty(2, |s| { ... })?;
+
+// no_std tier
+let (buf, len) = nanojson::stringify_sized_pretty::<256, _>(&entity, 2)?;
+let (buf, len) = nanojson::stringify_manual_sized_pretty::<256>(2, |s| { ... })?;
 ```
 
 ```json
