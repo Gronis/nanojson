@@ -1,24 +1,83 @@
 # nanojson
 
-A `#![no_std]`, allocation-free, no dependency JSON serializer and pull-parser for Rust.
+nanojson is a JSON serializer and pull-parser with **zero dependencies**. No `serde`, no `syn`, no `proc-macro2` — it adds nothing to your build graph. The derive macros are hand-rolled without any macro-writing libraries, so they compile instantly. The API is immediate-mode: you call methods to produce JSON and call methods to consume it, one value at a time. No intermediate tree, no `Value` type, no dynamic dispatch.
 
-nanojson is built for constrained environments: embedded systems, firmware, and any code that cannot use a heap. You supply the output buffer and the scratch space; nanojson never allocates unless you use the std interface.
+```rust
+// Annotate your types once:
+#[derive(nanojson::Serialize, nanojson::Deserialize)]
+struct Point { x: i64, y: i64 }
 
-It an immidiate mode / eager parser, meaning it does not create a tree structure or anything like that. The parser and schema is built into a single pass.
+// Then serialize and parse with a single call:
+let json: String = nanojson::stringify(&Point { x: 3, y: 4 })?;
+let point: Point = nanojson::parse(&json)?;
+```
 
-The main inspiration for this crate is jim by tsoding. It works in a similar fashion.
+Works with `std` (default — ergonomic one-liners) and without it (everything on the stack, useful in embedded and firmware contexts).
 
-Main goals:
-* No dependencies
-* No std compatible
-* As small and simple as possible
+---
 
-Non goals:
-* Serde compatibility
-* Async
-* Parallelized processing
+## Derive macros
 
-Enable the `std` feature (on by default) and nanojson also provides one-liner helpers that allocate for you — no buffer choices needed.
+Use `derive` feature (enabled by default) and annotate your types:
+
+```rust
+use nanojson::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct Vec2 {
+    x: i64,
+    y: i64,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct Entity {
+    id: i64,
+    #[nanojson(rename = "is_active")]
+    active: bool,
+    position: Vec2,   // nested derived struct — works automatically
+    health: i64,
+}
+
+// Unit enums serialize as JSON strings:
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum Team {
+    Red,
+    Blue,
+    #[nanojson(rename = "spectator")]
+    Spectator,
+}
+
+// Struct-variant enums use externally-tagged format: {"VariantName": {...}}
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum Event {
+    Spawn { entity_id: i64, x: i64, y: i64 },
+    Death { entity_id: i64 },
+}
+```
+
+#### `std` tier roundtrip
+
+```rust
+let entity = Entity { id: 42, active: true, position: Vec2 { x: 10, y: -5 }, health: 100 };
+
+let json: String = nanojson::stringify(&entity)?;
+// {"id":42,"is_active":true,"position":{"x":10,"y":-5},"health":100}
+
+let entity2: Entity = nanojson::parse(&json)?;
+assert_eq!(entity, entity2);
+```
+
+#### `no_std` tier roundtrip
+
+```rust
+let (buf, len) = nanojson::stringify_sized::<256, _>(&entity)?;
+// buf[..len] contains the JSON bytes
+
+let entity2: Entity = nanojson::parse_sized::<64, _>(&buf[..len])?;
+assert_eq!(entity, entity2);
+```
+
+---
 
 ## Core concepts
 
@@ -29,6 +88,8 @@ Enable the `std` feature (on by default) and nanojson also provides one-liner he
 | `Write` | Trait for output sinks. `SliceWriter` writes into a `&mut [u8]`. `SizeCounter` counts bytes without writing (useful for pre-sizing). `Vec<u8>` implements `Write` when the `std` feature is on. |
 | `Serialize` | Trait implemented by types that know how to write themselves. Primitive impls are provided. |
 | `Deserialize` | Trait implemented by types that know how to parse themselves. |
+
+---
 
 ## Two API tiers
 
@@ -132,69 +193,6 @@ let n = nanojson::measure(|s| entity.serialize(s));
 
 ---
 
-## Derive macros
-
-Add `nanojson-derive` as a dev-dependency and annotate your types:
-
-```rust
-use nanojson_derive::{Serialize, Deserialize};
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct Vec2 {
-    x: i64,
-    y: i64,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct Entity {
-    id: i64,
-    #[nanojson(rename = "is_active")]
-    active: bool,
-    position: Vec2,   // nested derived struct — works automatically
-    health: i64,
-}
-
-// Unit enums serialize as JSON strings:
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-enum Team {
-    Red,
-    Blue,
-    #[nanojson(rename = "spectator")]
-    Spectator,
-}
-
-// Struct-variant enums use externally-tagged format: {"VariantName": {...}}
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-enum Event {
-    Spawn { entity_id: i64, x: i64, y: i64 },
-    Death { entity_id: i64 },
-}
-```
-
-#### `std` tier roundtrip
-
-```rust
-let entity = Entity { id: 42, active: true, position: Vec2 { x: 10, y: -5 }, health: 100 };
-
-let json: String = nanojson::stringify(&entity)?;
-// {"id":42,"is_active":true,"position":{"x":10,"y":-5},"health":100}
-
-let entity2: Entity = nanojson::parse(&json)?;
-assert_eq!(entity, entity2);
-```
-
-#### `no_std` tier roundtrip
-
-```rust
-let (buf, len) = nanojson::stringify_sized::<256, _>(&entity)?;
-// buf[..len] contains the JSON bytes
-
-let entity2: Entity = nanojson::parse_sized::<64, _>(&buf[..len])?;
-assert_eq!(entity, entity2);
-```
-
----
-
 ## Pretty-printing
 
 ```rust
@@ -221,6 +219,7 @@ Serialization errors are `SerializeError<W::Error>`:
 |---|---|
 | `SerializeError::Write(e)` | Write error from the sink (e.g. `WriteError::BufferFull` from `SliceWriter`) |
 | `SerializeError::DepthExceeded` | Nesting exceeded the `DEPTH` const generic (default 32) |
+| `SerializeError::InvalidState` | `member_key` called outside an object or twice without an intervening value |
 
 Parse errors are `ParseError { kind: ParseErrorKind, offset: usize }`. The `offset` is a byte position in the source slice.
 
@@ -261,21 +260,6 @@ nanojson/
 │       └── derive_roundtrip.rs   integration tests
 └── nanojson-derive/              proc-macro crate (no syn/quote/proc_macro2)
 ```
-
----
-
-## Benefits
-
-- **No heap.** Zero allocation from library code. You own every byte.
-- **`#![no_std]`.** Works in bare-metal firmware, bootloaders, and kernel modules.
-- **No external dependencies.** `nanojson` has none. `nanojson-derive` uses only the built-in `proc_macro` crate.
-- **Ergonomic `std` tier.** With the `std` feature (on by default), `parse` / `parse_bytes` / `stringify` eliminate buffer management entirely.
-- **Deterministic.** No dynamic dispatch, no RTTI, no surprise allocations under load.
-- **Zero-copy string parsing.** Strings without escape sequences are returned as `&'src str` slices directly into the input. Only escaped strings touch the scratch buffer.
-- **Byte-accurate errors.** `ParseError::offset` points to the exact byte where parsing failed.
-- **Lookahead.** `is_null_ahead()`, `is_object_ahead()`, etc. let you branch on the next token type without consuming it.
-- **Size estimation.** `measure` runs the full serialization logic without writing a single byte — useful for pre-allocating a buffer of exactly the right size.
-- **Derive macros without syn.** `nanojson-derive` is hand-rolled proc-macro code; it adds nothing to your compile times.
 
 ---
 
