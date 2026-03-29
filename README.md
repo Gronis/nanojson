@@ -210,12 +210,12 @@ Pass an indent width to the `_pretty` variants of any serialization function:
 
 ```rust
 // std tier
-let json = nanojson::stringify_pretty(&entity, 2)?;
+let json = nanojson::stringify_pretty(2, &entity)?;
 let json = nanojson::stringify_manual_pretty(2, |s| { ... })?;
 
 // no_std tier
 let mut buf = [0; 256];
-let json = nanojson::stringify_sized_pretty(&mut buf, &entity, 2)?;
+let json = nanojson::stringify_sized_pretty(&mut buf, 2, &entity)?;
 let json = nanojson::stringify_manual_sized_pretty(&mut buf, 2, |s| { ... })?;
 ```
 
