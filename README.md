@@ -79,18 +79,6 @@ assert_eq!(entity, entity2);
 
 ---
 
-## Core concepts
-
-| Concept | What it is |
-|---|---|
-| `Serializer<W>` | Serializer. You call methods (`object_begin`, `member_key`, `integer`, …) in order and it writes JSON to your `W: Write` sink. |
-| `Parser<'src, 'buf>` | Pull parser. You drive it step by step (`object_begin`, `object_member`, `number_str`, …). It never builds a tree. |
-| `Write` | Trait for output sinks. `SliceWriter` writes into a `&mut [u8]`. `SizeCounter` counts bytes without writing (useful for pre-sizing). `Vec<u8>` implements `Write` when the `std` feature is on. |
-| `Serialize` | Trait implemented by types that know how to write themselves. Primitive impls are provided. |
-| `Deserialize` | Trait implemented by types that know how to parse themselves. |
-
----
-
 ## Feature tiers
 
 | Feature | Enables |
@@ -273,6 +261,17 @@ nanojson/
 │       └── derive_roundtrip.rs   integration tests
 └── nanojson-derive/              proc-macro crate (no syn/quote/proc_macro2)
 ```
+---
+
+## Core concepts
+
+| Concept | What it is |
+|---|---|
+| `Serializer<W>` | Serializer. You call methods (`object_begin`, `member_key`, `integer`, …) in order and it writes JSON to your `W: Write` sink. |
+| `Parser<'src, 'buf>` | Pull parser. You drive it step by step (`object_begin`, `object_member`, `number_str`, …). It never builds a tree. |
+| `Write` | Trait for output sinks. `SliceWriter` writes into a `&mut [u8]`. `SizeCounter` counts bytes without writing (useful for pre-sizing). `Vec<u8>` implements `Write` when the `std` feature is on. |
+| `Serialize` | Trait implemented by types that know how to write themselves. Primitive impls are provided. |
+| `Deserialize` | Trait implemented by types that know how to parse themselves. |
 
 ---
 
