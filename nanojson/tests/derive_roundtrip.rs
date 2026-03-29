@@ -446,8 +446,23 @@ fn test_unknown_field_error() {
     let result = Point::deserialize(&mut json);
     assert!(matches!(
         result,
-        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField, .. })
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
     ));
+}
+
+#[test]
+fn test_unknown_field_error_carries_metadata() {
+    let src = br#"{"x":1,"y":2,"z":3}"#;
+    let mut buf = [0u8; 64];
+    let mut json = Parser::new(src, &mut buf);
+    let err = Point::deserialize(&mut json).unwrap_err();
+    if let nanojson::ParseErrorKind::UnknownField { type_name, expected_fields } = err.kind {
+        assert_eq!(type_name, "Point");
+        assert!(expected_fields.contains(&"x"));
+        assert!(expected_fields.contains(&"y"));
+    } else {
+        panic!("expected UnknownField error");
+    }
 }
 
 #[test]
@@ -471,7 +486,7 @@ fn test_unknown_field_in_nested_error() {
     let result = Person::deserialize(&mut json);
     assert!(matches!(
         result,
-        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField, .. })
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
     ));
 }
 
@@ -636,7 +651,7 @@ fn test_enum_unknown_variant_error() {
     let result = Direction::deserialize(&mut json);
     assert!(matches!(
         result,
-        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField, .. })
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
     ));
 }
 
@@ -648,7 +663,7 @@ fn test_struct_enum_unknown_variant_error() {
     let result = Shape::deserialize(&mut json);
     assert!(matches!(
         result,
-        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField, .. })
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
     ));
 }
 
@@ -710,7 +725,7 @@ fn test_mixed_enum_unknown_variant_error() {
     let result: Result<Action, _> = nanojson::parse(r#""Unknown""#);
     assert!(matches!(
         result,
-        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField, .. })
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
     ));
 }
 

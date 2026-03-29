@@ -21,7 +21,13 @@ pub enum ParseErrorKind {
     InvalidEscape(u8),
     StringBufferOverflow,
     InvalidUtf8,
-    UnknownField,
+    /// A JSON key was present that is not a recognised field for this type.
+    /// `type_name` is the struct or enum being parsed; `expected_fields` lists
+    /// the valid key names (empty when parsing with hand-written code).
+    UnknownField {
+        type_name: &'static str,
+        expected_fields: &'static [&'static str],
+    },
     MissingField { field: &'static str },
 }
 
@@ -176,8 +182,25 @@ impl core::fmt::Display for ParseErrorKind {
                 f.write_str("string exceeds scratch buffer"),
             ParseErrorKind::InvalidUtf8 =>
                 f.write_str("invalid UTF-8 in string"),
-            ParseErrorKind::UnknownField =>
-                f.write_str("unknown field"),
+            ParseErrorKind::UnknownField { type_name, expected_fields } => {
+                if type_name.is_empty() {
+                    f.write_str("unknown field")?;
+                } else {
+                    write!(f, "unknown field in `{type_name}`")?;
+                }
+                match expected_fields {
+                    [] => Ok(()),
+                    [only] => write!(f, ", expected `{only}`"),
+                    fields => {
+                        f.write_str(", expected one of: ")?;
+                        for (i, name) in fields.iter().enumerate() {
+                            if i > 0 { f.write_str(", ")?; }
+                            write!(f, "`{name}`")?;
+                        }
+                        Ok(())
+                    }
+                }
+            }
             ParseErrorKind::MissingField { field } =>
                 write!(f, "missing required field `{field}`"),
         }

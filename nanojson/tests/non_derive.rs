@@ -1002,7 +1002,7 @@ fn test_unknown_field() {
     j.object_begin().unwrap();
     assert_eq!(j.object_member().unwrap(), Some("z"));
     let err = j.unknown_field();
-    assert!(matches!(err.kind, ParseErrorKind::UnknownField));
+    assert!(matches!(err.kind, ParseErrorKind::UnknownField { .. }));
 }
 
 // ============================================================

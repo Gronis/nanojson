@@ -337,7 +337,13 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// Returns an `UnknownField` error at the current position.
     /// Call this inside the `_` arm of your `object_member` match.
     pub fn unknown_field(&self) -> ParseError {
-        ParseError::at(self.key_start, ParseErrorKind::UnknownField)
+        ParseError::at(self.key_start, ParseErrorKind::UnknownField { type_name: "", expected_fields: &[] })
+    }
+
+    /// Returns an `UnknownField` error enriched with the type name and its valid field names.
+    /// Used by derive-generated code to produce more helpful diagnostics.
+    pub fn unknown_field_in(&self, type_name: &'static str, expected_fields: &'static [&'static str]) -> ParseError {
+        ParseError::at(self.key_start, ParseErrorKind::UnknownField { type_name, expected_fields })
     }
 
     /// Parse `[`.

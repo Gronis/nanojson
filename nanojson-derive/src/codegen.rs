@@ -141,7 +141,7 @@ pub(crate) fn gen_deserialize(item: &ParsedItem) -> Result<TokenStream, TokenStr
     let gp = generics_params(&item.generics);
 
     let body = match &item.kind {
-        ItemKind::Struct(fields) => gen_deserialize_object_fields(fields, name, true)?,
+        ItemKind::Struct(fields) => gen_deserialize_object_fields(fields, name, name, true)?,
         ItemKind::Enum(variants) => gen_deserialize_enum(name, variants)?,
     };
 
@@ -195,6 +195,7 @@ pub(crate) fn gen_deserialize(item: &ParsedItem) -> Result<TokenStream, TokenStr
 fn gen_deserialize_object_fields(
     fields: &[ParsedField],
     constructor: &str,
+    type_name: &str,
     wrap_ok: bool,
 ) -> Result<String, TokenStream> {
     let mut code = String::new();
@@ -206,6 +207,12 @@ fn gen_deserialize_object_fields(
             "let mut {fname}: ::core::option::Option<{fty}> = ::core::option::Option::None;"
         ));
     }
+
+    // Build a static slice literal of valid JSON field names for error reporting.
+    let field_names: String = fields.iter()
+        .map(|f| format!("{}, ", escape_rust_str(&f.json_name)))
+        .collect();
+    let expected_fields_expr = format!("&[{field_names}]");
 
     code.push_str("__json.object_begin()?;");
     code.push_str("while let ::core::option::Option::Some(__key) = __json.object_member()? {");
@@ -219,7 +226,12 @@ fn gen_deserialize_object_fields(
             ); }}"
         ));
     }
-    code.push_str("_ => { return ::core::result::Result::Err(__json.unknown_field()); }");
+    let tn = escape_rust_str(type_name);
+    code.push_str(&format!(
+        "_ => {{ return ::core::result::Result::Err(\
+            __json.unknown_field_in({tn}, {expected_fields_expr})\
+        ); }}"
+    ));
     code.push_str("}"); // match
     code.push_str("}"); // while
     code.push_str("__json.object_end()?;");
@@ -257,6 +269,13 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
     // For enums with struct variants, read an object with one key.
     let all_unit = variants.iter().all(|v| matches!(v.fields, VariantFields::Unit));
 
+    // Static slice of all variant JSON names for error reporting.
+    let variant_names: String = variants.iter()
+        .map(|v| format!("{}, ", escape_rust_str(&v.json_name)))
+        .collect();
+    let expected_variants_expr = format!("&[{variant_names}]");
+    let tn = escape_rust_str(name);
+
     if all_unit {
         code.push_str("let __tag = __json.string()?;");
         code.push_str("match __tag {");
@@ -268,10 +287,9 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
             ));
         }
         code.push_str(&format!(
-            "_ => ::core::result::Result::Err(::nanojson::ParseError {{ \
-                kind: ::nanojson::ParseErrorKind::UnknownField, \
-                offset: __json.error_offset() \
-            }}),"
+            "_ => ::core::result::Result::Err(\
+                __json.unknown_field_in({tn}, {expected_variants_expr})\
+            ),"
         ));
         code.push_str("}"); // match
     } else {
@@ -308,10 +326,9 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
             }
         }
         code.push_str(&format!(
-            "_ => return ::core::result::Result::Err(::nanojson::ParseError {{ \
-                kind: ::nanojson::ParseErrorKind::UnknownField, \
-                offset: __json.error_offset() \
-            }}),"
+            "_ => return ::core::result::Result::Err(\
+                __json.unknown_field_in({tn}, {expected_variants_expr})\
+            ),"
         ));
         code.push_str("}"); // match
 
@@ -331,6 +348,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
                     let body = gen_deserialize_object_fields(
                         fields,
                         &format!("{name}::{vname}"),
+                        name,
                         false,
                     )?;
                     format!("{{ {body} }}")
@@ -339,10 +357,9 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
             code.push_str(&format!("{jname} => {inner},"));
         }
         code.push_str(&format!(
-            "_ => return ::core::result::Result::Err(::nanojson::ParseError {{ \
-                kind: ::nanojson::ParseErrorKind::UnknownField, \
-                offset: __json.error_offset() \
-            }}),"
+            "_ => return ::core::result::Result::Err(\
+                __json.unknown_field_in({tn}, {expected_variants_expr})\
+            ),"
         ));
         code.push_str("}"); // match
         code.push_str("} else {");
