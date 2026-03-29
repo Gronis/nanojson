@@ -5,6 +5,7 @@
 [![CI](https://github.com/Gronis/nanojson/actions/workflows/ci.yml/badge.svg)](https://github.com/Gronis/nanojson/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT%20-blue.svg)](https://github.com/Gronis/nanojson/blob/main/LICENCE)
 [![Rust 100% Safe](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/Gronis/nanojson/blob/main/nanojson/src/lib.rs)
+[![no-std compatible](https://img.shields.io/badge/no%E2%80%93std-compatible-brightgreen)](https://github.com/Gronis/nanojson/blob/main/nanojson/src/lib.rs)
 
 
 nanojson is a **zero-dependency**, `no-std` compatible JSON serializer and pull-parser with hand-written derives (no `serde`, no `pro-macro2`). It uses an immediate-mode API, validating your schema while parsing. 
