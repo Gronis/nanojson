@@ -202,11 +202,17 @@ fn main() {
             "session_foo": 3
         },
         "events": [
-            { "Login": { "user_id": 3 } }
+            { "Login": { "user_id": 3 } },
+            { "Logout": null }
         ]
     }
     "#;
 
-    let parsed: AppState = nanojson::parse(raw).unwrap();
-    std::println!("\nParsed from raw JSON:\n{:?}", parsed);
+    println!("");
+    match nanojson::parse::<AppState>(raw) {
+        Ok(parsed) => {
+            std::println!("\nParsed from raw JSON:\n{:?}", parsed);
+        }
+        Err(e) =>  e.print(raw),
+    }
 }
