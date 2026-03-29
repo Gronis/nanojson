@@ -10,7 +10,8 @@ categories = ["encoding", "embedded", "no-std"]
 
 [features]
 default = ["std", "derive"]
-std = []
+alloc = []
+std = ["alloc"]
 derive = ["nanojson-derive"]
 
 [dependencies]

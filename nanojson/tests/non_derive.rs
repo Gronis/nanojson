@@ -1169,3 +1169,208 @@ fn test_deserialize_option() {
     assert_eq!(Option::<i64>::deserialize( &mut Parser::new(b"null",  &mut buf)).unwrap(), None);
     assert_eq!(Option::<i64>::deserialize( &mut Parser::new(b"99",    &mut buf)).unwrap(), Some(99));
 }
+
+// ============================================================
+// ---- f32 / f64 ----
+// ============================================================
+
+#[test]
+fn test_f64_serialize() {
+    assert_eq!(ser!(|s| 1.5f64.serialize(s)),   "1.5");
+    assert_eq!(ser!(|s| (-3.0f64).serialize(s)), "-3");
+    assert_eq!(ser!(|s| 0.0f64.serialize(s)),   "0");
+    assert_eq!(ser!(|s| 1e10f64.serialize(s)),  "10000000000");
+    assert_eq!(ser!(|s| 1.23e-4f64.serialize(s)), "0.000123");
+}
+
+#[test]
+fn test_f32_serialize() {
+    assert_eq!(ser!(|s| 1.5f32.serialize(s)), "1.5");
+    assert_eq!(ser!(|s| 0.0f32.serialize(s)), "0");
+}
+
+#[test]
+fn test_float_non_finite_error() {
+    let mut buf = [0u8; 32];
+    let r = try_serialize::<32, _>(&mut buf, |s| f64::NAN.serialize(s));
+    assert!(matches!(r, Err(SerializeError::InvalidValue(_))));
+    let r = try_serialize::<32, _>(&mut buf, |s| f64::INFINITY.serialize(s));
+    assert!(matches!(r, Err(SerializeError::InvalidValue(_))));
+    let r = try_serialize::<32, _>(&mut buf, |s| f64::NEG_INFINITY.serialize(s));
+    assert!(matches!(r, Err(SerializeError::InvalidValue(_))));
+}
+
+#[test]
+fn test_f64_deserialize() {
+    let mut buf = [0u8; 8];
+    assert_eq!(f64::deserialize(&mut Parser::new(b"1.5",  &mut buf)).unwrap(), 1.5);
+    assert_eq!(f64::deserialize(&mut Parser::new(b"-3.0", &mut buf)).unwrap(), -3.0);
+    assert_eq!(f64::deserialize(&mut Parser::new(b"0",    &mut buf)).unwrap(), 0.0);
+    assert_eq!(f64::deserialize(&mut Parser::new(b"1e2",  &mut buf)).unwrap(), 100.0);
+}
+
+#[test]
+fn test_f32_deserialize() {
+    let mut buf = [0u8; 8];
+    assert!((f32::deserialize(&mut Parser::new(b"1.5", &mut buf)).unwrap() - 1.5f32).abs() < 1e-6);
+}
+
+#[test]
+fn test_f64_roundtrip() {
+    for v in [0.0, 1.0, -1.0, 0.5, 1.23456789, -9999.125, 1e15] {
+        let json = nanojson::stringify(&v).unwrap();
+        let back: f64 = nanojson::parse(&json).unwrap();
+        assert!((back - v).abs() <= v.abs() * 1e-10 + 1e-300,
+            "{v} -> {json} -> {back}");
+    }
+}
+
+// ============================================================
+// ---- Vec ----
+// ============================================================
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_vec_serialize() {
+    assert_eq!(nanojson::stringify(&vec![1i64, 2, 3]).unwrap(), "[1,2,3]");
+    assert_eq!(nanojson::stringify(&Vec::<i64>::new()).unwrap(), "[]");
+    assert_eq!(
+        nanojson::stringify(&vec!["a".to_owned(), "b".to_owned()]).unwrap(),
+        r#"["a","b"]"#
+    );
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_vec_deserialize() {
+    let v: std::vec::Vec<i64> = nanojson::parse("[1,2,3]").unwrap();
+    assert_eq!(v, [1, 2, 3]);
+
+    let empty: std::vec::Vec<i64> = nanojson::parse("[]").unwrap();
+    assert!(empty.is_empty());
+
+    let strings: std::vec::Vec<std::string::String> = nanojson::parse(r#"["x","y"]"#).unwrap();
+    assert_eq!(strings, ["x", "y"]);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_vec_nested() {
+    let v: std::vec::Vec<std::vec::Vec<i64>> = nanojson::parse("[[1,2],[3,4]]").unwrap();
+    assert_eq!(v, [[1, 2], [3, 4]]);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_vec_roundtrip() {
+    let src = vec![10i64, 20, 30];
+    let json = nanojson::stringify(&src).unwrap();
+    let back: std::vec::Vec<i64> = nanojson::parse(&json).unwrap();
+    assert_eq!(src, back);
+}
+
+// ============================================================
+// ---- Box ----
+// ============================================================
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_box_serialize() {
+    assert_eq!(nanojson::stringify(&std::boxed::Box::new(42i64)).unwrap(), "42");
+    assert_eq!(nanojson::stringify(&std::boxed::Box::new(true)).unwrap(), "true");
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_box_deserialize() {
+    let b: std::boxed::Box<i64> = nanojson::parse("42").unwrap();
+    assert_eq!(*b, 42);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_box_roundtrip() {
+    let src = std::boxed::Box::new(vec![1i64, 2, 3]);
+    let json = nanojson::stringify(&src).unwrap();
+    let back: std::boxed::Box<std::vec::Vec<i64>> = nanojson::parse(&json).unwrap();
+    assert_eq!(*src, *back);
+}
+
+// ============================================================
+// ---- BTreeMap ----
+// ============================================================
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_btreemap_serialize() {
+    let mut m = std::collections::BTreeMap::new();
+    m.insert("b".to_owned(), 2i64);
+    m.insert("a".to_owned(), 1i64);
+    // BTreeMap iterates in sorted key order, so output is deterministic.
+    assert_eq!(nanojson::stringify(&m).unwrap(), r#"{"a":1,"b":2}"#);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_btreemap_deserialize() {
+    let m: std::collections::BTreeMap<std::string::String, i64> =
+        nanojson::parse(r#"{"x":1,"y":2}"#).unwrap();
+    assert_eq!(m["x"], 1);
+    assert_eq!(m["y"], 2);
+    assert_eq!(m.len(), 2);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_btreemap_empty() {
+    let m: std::collections::BTreeMap<std::string::String, i64> =
+        nanojson::parse("{}").unwrap();
+    assert!(m.is_empty());
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_btreemap_roundtrip() {
+    let mut src = std::collections::BTreeMap::new();
+    src.insert("key1".to_owned(), vec![1i64, 2]);
+    src.insert("key2".to_owned(), vec![3i64, 4]);
+    let json = nanojson::stringify(&src).unwrap();
+    let back: std::collections::BTreeMap<std::string::String, std::vec::Vec<i64>> =
+        nanojson::parse(&json).unwrap();
+    assert_eq!(src, back);
+}
+
+// ============================================================
+// ---- HashMap ----
+// ============================================================
+
+#[cfg(feature = "std")]
+#[test]
+fn test_hashmap_serialize() {
+    let mut m = std::collections::HashMap::new();
+    m.insert("only".to_owned(), 99i64);
+    let json = nanojson::stringify(&m).unwrap();
+    // single-entry map, deterministic
+    assert_eq!(json, r#"{"only":99}"#);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_hashmap_deserialize() {
+    let m: std::collections::HashMap<std::string::String, bool> =
+        nanojson::parse(r#"{"a":true,"b":false}"#).unwrap();
+    assert_eq!(m["a"], true);
+    assert_eq!(m["b"], false);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_hashmap_roundtrip() {
+    let mut src = std::collections::HashMap::new();
+    src.insert("x".to_owned(), 1i64);
+    src.insert("y".to_owned(), 2i64);
+    let json = nanojson::stringify(&src).unwrap();
+    let back: std::collections::HashMap<std::string::String, i64> =
+        nanojson::parse(&json).unwrap();
+    assert_eq!(src, back);
+}

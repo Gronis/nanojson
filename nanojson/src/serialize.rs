@@ -48,6 +48,8 @@ pub enum SerializeError<E> {
     /// `member_key` / `member_key_bytes` was called outside an object scope,
     /// or was called twice without an intervening value.
     InvalidState,
+    /// A value cannot be represented as JSON (e.g. a NaN or infinite float).
+    InvalidValue(&'static str),
 }
 
 impl<E> From<E> for SerializeError<E> {
@@ -59,9 +61,10 @@ impl<E> From<E> for SerializeError<E> {
 impl<E: core::fmt::Display> core::fmt::Display for SerializeError<E> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            SerializeError::Write(e)      => write!(f, "write error: {e}"),
-            SerializeError::DepthExceeded => f.write_str("nesting depth exceeded"),
-            SerializeError::InvalidState  => f.write_str("invalid serializer call order"),
+            SerializeError::Write(e)       => write!(f, "write error: {e}"),
+            SerializeError::DepthExceeded  => f.write_str("nesting depth exceeded"),
+            SerializeError::InvalidState   => f.write_str("invalid serializer call order"),
+            SerializeError::InvalidValue(m) => write!(f, "invalid value: {m}"),
         }
     }
 }
@@ -382,8 +385,8 @@ impl Serialize for &str {
     }
 }
 
-#[cfg(feature = "std")]
-impl Serialize for std::string::String {
+#[cfg(feature = "alloc")]
+impl Serialize for alloc::string::String {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
         ser.string(self)
     }
@@ -411,6 +414,81 @@ impl<T: Serialize> Serialize for [T] {
 impl<T: Serialize, const N: usize> Serialize for [T; N] {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
         self.as_slice().serialize(ser)
+    }
+}
+
+fn serialize_float<W: Write>(ser: &mut Serializer<W>, v: f64) -> Result<(), SerializeError<W::Error>> {
+    if !v.is_finite() {
+        return Err(SerializeError::InvalidValue("float must be finite (not NaN or Infinity)"));
+    }
+    // Format into a 32-byte stack buffer via core::fmt::Write — no alloc needed.
+    let mut buf = [0u8; 32];
+    let mut pos = 0usize;
+    struct FloatBuf<'a>(&'a mut [u8], &'a mut usize);
+    impl core::fmt::Write for FloatBuf<'_> {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            let b = s.as_bytes();
+            let end = *self.1 + b.len();
+            if end > self.0.len() { return Err(core::fmt::Error); }
+            self.0[*self.1..end].copy_from_slice(b);
+            *self.1 = end;
+            Ok(())
+        }
+    }
+    let _ = core::fmt::write(&mut FloatBuf(&mut buf, &mut pos), format_args!("{v}"));
+    // SAFETY: f64 Display only emits ASCII digits, '.', 'e', '+', '-'.
+    ser.number_raw(unsafe { core::str::from_utf8_unchecked(&buf[..pos]) })
+}
+
+impl Serialize for f32 {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        serialize_float(ser, *self as f64)
+    }
+}
+
+impl Serialize for f64 {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        serialize_float(ser, *self)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<T: Serialize> Serialize for alloc::vec::Vec<T> {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        self.as_slice().serialize(ser)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<T: Serialize> Serialize for alloc::boxed::Box<T> {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        (**self).serialize(ser)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<K: AsRef<str>, V: Serialize> Serialize for alloc::collections::BTreeMap<K, V> {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.object_begin()?;
+        for (k, v) in self {
+            ser.member_key(k.as_ref())?;
+            v.serialize(ser)?;
+        }
+        ser.object_end()
+    }
+}
+
+#[cfg(feature = "std")]
+impl<K: AsRef<str> + Eq + std::hash::Hash, V: Serialize> Serialize
+    for std::collections::HashMap<K, V>
+{
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.object_begin()?;
+        for (k, v) in self {
+            ser.member_key(k.as_ref())?;
+            v.serialize(ser)?;
+        }
+        ser.object_end()
     }
 }
 

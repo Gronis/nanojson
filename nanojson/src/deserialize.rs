@@ -452,29 +452,34 @@ impl<'src, 'buf> Deserialize<'src, 'buf> for &'buf str {
     }
 }
 
-#[cfg(feature = "std")]
-impl<'src, 'buf> Deserialize<'src, 'buf> for std::string::String {
+#[cfg(feature = "alloc")]
+impl<'src, 'buf> Deserialize<'src, 'buf> for alloc::string::String {
     fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        Ok(std::string::String::from(json.string()?))
+        Ok(alloc::string::String::from(json.string()?))
     }
 }
 
-// Note: there is intentionally NO `Deserialize` impl for `&str` (or
-// `&'buf str`). The scratch buffer is reused on every `string()` /
-// `object_member()` call, so any `&str` reference into it is invalidated the
-// moment the next string is parsed. Providing an impl that returns `&'buf str`
-// would appear safe to the borrow checker (since `'buf` covers the whole parse
-// session) but would silently hand out stale string slices.
-//
-// For deserialized strings:
-//  - In `no_std` + `no_alloc` contexts: read `parser.string()` immediately and
-//    copy the bytes into your own per-field array before calling any further
-//    parse method.
-//  - When `alloc` is available (add `extern crate alloc`): implement
-//    `Deserialize` for `alloc::string::String` yourself.
-//  - The `#[derive(Deserialize)]` macro supports string fields; it is
-//    the user's responsibility to ensure the scratch buffer is large enough
-//    and to copy string values before overwriting.
+impl<'src, 'buf> Deserialize<'src, 'buf> for f32 {
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let s = parser.number_str()?;
+        let offset = parser.error_offset();
+        s.parse::<f32>().map_err(|_| ParseError::at(
+            offset,
+            ParseErrorKind::UnexpectedToken { expected: "number", got: "invalid float" },
+        ))
+    }
+}
+
+impl<'src, 'buf> Deserialize<'src, 'buf> for f64 {
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let s = parser.number_str()?;
+        let offset = parser.error_offset();
+        s.parse::<f64>().map_err(|_| ParseError::at(
+            offset,
+            ParseErrorKind::UnexpectedToken { expected: "number", got: "invalid float" },
+        ))
+    }
+}
 
 macro_rules! impl_integer {
     ($($t:ty),*) => {$(
@@ -546,6 +551,60 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<
         } else {
             T::deserialize(parser).map(Some)
         }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for alloc::vec::Vec<T> {
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let mut vec = alloc::vec::Vec::new();
+        parser.array_begin()?;
+        while parser.array_item()? {
+            vec.push(T::deserialize(parser)?);
+        }
+        parser.array_end()?;
+        Ok(vec)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for alloc::boxed::Box<T> {
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        T::deserialize(parser).map(alloc::boxed::Box::new)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'src, 'buf, V: Deserialize<'src, 'buf>> Deserialize<'src, 'buf>
+    for alloc::collections::BTreeMap<alloc::string::String, V>
+{
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let mut map = alloc::collections::BTreeMap::new();
+        parser.object_begin()?;
+        while let Some(key) = parser.object_member()? {
+            let key = alloc::string::String::from(key);
+            let value = V::deserialize(parser)?;
+            map.insert(key, value);
+        }
+        parser.object_end()?;
+        Ok(map)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'src, 'buf, V: Deserialize<'src, 'buf>> Deserialize<'src, 'buf>
+    for std::collections::HashMap<std::string::String, V>
+{
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let mut map = std::collections::HashMap::new();
+        parser.object_begin()?;
+        while let Some(key) = parser.object_member()? {
+            let key = std::string::String::from(key);
+            let value = V::deserialize(parser)?;
+            map.insert(key, value);
+        }
+        parser.object_end()?;
+        Ok(map)
     }
 }
 
