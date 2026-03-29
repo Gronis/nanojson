@@ -7,6 +7,7 @@ license = "MIT"
 repository = "https://github.com/Gronis/nanojson"
 keywords = ["json", "no_std", "embedded", "serialization", "parser"]
 categories = ["encoding", "embedded", "no-std", "parsing"]
+readme = "../README.md"
 
 [features]
 default = ["std", "derive"]
