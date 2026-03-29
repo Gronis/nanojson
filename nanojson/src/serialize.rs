@@ -420,9 +420,8 @@ macro_rules! impl_integer {
         }
     )*};
 }
-impl_integer!(i8, i16, i32, i64, u8, u16, u32);
+impl_integer!(i8, i16, i32, i64, u8, u16, u32, isize);
 
-// i64 and isize go through integer() too, but the macro cast is fine for signed values.
 // u64 and usize need unsigned() to avoid silent truncation of values > i64::MAX.
 impl Serialize for u64 {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
@@ -432,11 +431,6 @@ impl Serialize for u64 {
 impl Serialize for usize {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
         ser.unsigned(*self as u64)
-    }
-}
-impl Serialize for isize {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.integer(*self as i64)
     }
 }
 impl Serialize for i128 {
@@ -543,30 +537,29 @@ impl<T: Serialize> Serialize for alloc::boxed::Box<T> {
     }
 }
 
+macro_rules! impl_serialize_map {
+    ($($bound:tt)*) => {
+        fn serialize<__W: Write>(&self, ser: &mut Serializer<__W>) -> Result<(), SerializeError<__W::Error>> {
+            ser.object_begin()?;
+            for (k, v) in self {
+                ser.member_key(k.as_ref())?;
+                v.serialize(ser)?;
+            }
+            ser.object_end()
+        }
+    };
+}
+
 #[cfg(feature = "alloc")]
 impl<K: AsRef<str>, V: Serialize> Serialize for alloc::collections::BTreeMap<K, V> {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.object_begin()?;
-        for (k, v) in self {
-            ser.member_key(k.as_ref())?;
-            v.serialize(ser)?;
-        }
-        ser.object_end()
-    }
+    impl_serialize_map!();
 }
 
 #[cfg(feature = "std")]
 impl<K: AsRef<str> + Eq + std::hash::Hash, V: Serialize> Serialize
     for std::collections::HashMap<K, V>
 {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.object_begin()?;
-        for (k, v) in self {
-            ser.member_key(k.as_ref())?;
-            v.serialize(ser)?;
-        }
-        ser.object_end()
-    }
+    impl_serialize_map!();
 }
 
 #[cfg(feature = "arrayvec")]

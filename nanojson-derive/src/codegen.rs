@@ -141,7 +141,7 @@ pub(crate) fn gen_deserialize(item: &ParsedItem) -> Result<TokenStream, TokenStr
     let gp = generics_params(&item.generics);
 
     let body = match &item.kind {
-        ItemKind::Struct(fields) => gen_deserialize_struct(name, fields)?,
+        ItemKind::Struct(fields) => gen_deserialize_object_fields(fields, name, true)?,
         ItemKind::Enum(variants) => gen_deserialize_enum(name, variants)?,
     };
 
@@ -186,10 +186,19 @@ pub(crate) fn gen_deserialize(item: &ParsedItem) -> Result<TokenStream, TokenStr
     })
 }
 
-fn gen_deserialize_struct(name: &str, fields: &[ParsedField]) -> Result<String, TokenStream> {
+/// Shared core for deserializing a JSON object into named fields.
+///
+/// `constructor` is the Rust path used to build the value: a struct name like `"Point"` or an
+/// enum variant path like `"Event::Login"`.  When `wrap_ok` is true the result expression is
+/// wrapped in `::core::result::Result::Ok(...)` (used by top-level struct impls); for enum
+/// variants the caller is responsible for the outer `Ok`.
+fn gen_deserialize_object_fields(
+    fields: &[ParsedField],
+    constructor: &str,
+    wrap_ok: bool,
+) -> Result<String, TokenStream> {
     let mut code = String::new();
 
-    // Declare Option<T> for each field
     for f in fields {
         let fname = &f.name;
         let fty = tts_to_string(&f.ty);
@@ -215,8 +224,11 @@ fn gen_deserialize_struct(name: &str, fields: &[ParsedField]) -> Result<String, 
     code.push_str("}"); // while
     code.push_str("__json.object_end()?;");
 
-    // Construct the value, returning MissingField if any field is None
-    code.push_str(&format!("::core::result::Result::Ok({name} {{"));
+    if wrap_ok {
+        code.push_str(&format!("::core::result::Result::Ok({constructor} {{"));
+    } else {
+        code.push_str(&format!("{constructor} {{"));
+    }
     for f in fields {
         let fname = &f.name;
         let jname = escape_rust_str(&f.json_name);
@@ -233,7 +245,7 @@ fn gen_deserialize_struct(name: &str, fields: &[ParsedField]) -> Result<String, 
             ));
         }
     }
-    code.push_str("})"); // Ok(Name { ... })
+    code.push_str(if wrap_ok { "})" } else { "}" });
 
     Ok(code)
 }
@@ -316,7 +328,11 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
                     format!("{{ __json.null()?; {name}::{vname} }}")
                 }
                 VariantFields::Named(fields) => {
-                    let body = gen_deserialize_struct_variant(name, vname, fields)?;
+                    let body = gen_deserialize_object_fields(
+                        fields,
+                        &format!("{name}::{vname}"),
+                        false,
+                    )?;
                     format!("{{ {body} }}")
                 }
             };
@@ -342,56 +358,6 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
         code.push_str("}"); // else (object path)
     }
 
-    Ok(code)
-}
-
-fn gen_deserialize_struct_variant(
-    enum_name: &str,
-    variant_name: &str,
-    fields: &[ParsedField],
-) -> Result<String, TokenStream> {
-    let mut code = String::new();
-    for f in fields {
-        let fname = &f.name;
-        let fty = tts_to_string(&f.ty);
-        code.push_str(&format!(
-            "let mut {fname}: ::core::option::Option<{fty}> = ::core::option::Option::None;"
-        ));
-    }
-    code.push_str("__json.object_begin()?;");
-    code.push_str("while let ::core::option::Option::Some(__key) = __json.object_member()? {");
-    code.push_str("match __key {");
-    for f in fields {
-        let fname = &f.name;
-        let jname = escape_rust_str(&f.json_name);
-        code.push_str(&format!(
-            "{jname} => {{ {fname} = ::core::option::Option::Some(\
-                ::nanojson::Deserialize::deserialize(__json)?\
-            ); }}"
-        ));
-    }
-    code.push_str("_ => { return ::core::result::Result::Err(__json.unknown_field()); }");
-    code.push_str("}");
-    code.push_str("}");
-    code.push_str("__json.object_end()?;");
-    code.push_str(&format!("{enum_name}::{variant_name} {{"));
-    for f in fields {
-        let fname = &f.name;
-        let jname = escape_rust_str(&f.json_name);
-        if f.has_default {
-            code.push_str(&format!(
-                "{fname}: {fname}.unwrap_or(::core::default::Default::default()),"
-            ));
-        } else {
-            code.push_str(&format!(
-                "{fname}: {fname}.ok_or_else(|| ::nanojson::ParseError {{ \
-                    kind: ::nanojson::ParseErrorKind::MissingField {{ field: {jname} }}, \
-                    offset: __json.error_offset() \
-                }})?,"
-            ));
-        }
-    }
-    code.push_str("}");
     Ok(code)
 }
 

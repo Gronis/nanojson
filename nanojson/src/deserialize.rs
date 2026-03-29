@@ -459,27 +459,21 @@ impl<'src, 'buf> Deserialize<'src, 'buf> for alloc::string::String {
     }
 }
 
-impl<'src, 'buf> Deserialize<'src, 'buf> for f32 {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        let s = parser.number_str()?;
-        let offset = parser.error_offset();
-        s.parse::<f32>().map_err(|_| ParseError::at(
-            offset,
-            ParseErrorKind::UnexpectedToken { expected: "number", got: "invalid float" },
-        ))
-    }
+macro_rules! impl_float {
+    ($($t:ty),*) => {$(
+        impl<'src, 'buf> Deserialize<'src, 'buf> for $t {
+            fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+                let s = parser.number_str()?;
+                let offset = parser.error_offset();
+                s.parse::<$t>().map_err(|_| ParseError::at(
+                    offset,
+                    ParseErrorKind::UnexpectedToken { expected: "number", got: "invalid float" },
+                ))
+            }
+        }
+    )*};
 }
-
-impl<'src, 'buf> Deserialize<'src, 'buf> for f64 {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        let s = parser.number_str()?;
-        let offset = parser.error_offset();
-        s.parse::<f64>().map_err(|_| ParseError::at(
-            offset,
-            ParseErrorKind::UnexpectedToken { expected: "number", got: "invalid float" },
-        ))
-    }
-}
+impl_float!(f32, f64);
 
 macro_rules! impl_integer {
     ($($t:ty),*) => {$(
@@ -646,39 +640,35 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for alloc::
     }
 }
 
-#[cfg(feature = "alloc")]
-impl<'src, 'buf, V: Deserialize<'src, 'buf>> Deserialize<'src, 'buf>
-    for alloc::collections::BTreeMap<alloc::string::String, V>
-{
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        let mut map = alloc::collections::BTreeMap::new();
-        parser.object_begin()?;
-        while let Some(key) = parser.object_member()? {
-            let key = alloc::string::String::from(key);
-            let value = V::deserialize(parser)?;
-            map.insert(key, value);
+macro_rules! impl_deserialize_map {
+    ($map_ty:ty, $new:expr) => {
+        impl<'src, 'buf, V: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for $map_ty {
+            fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+                let mut map = $new;
+                parser.object_begin()?;
+                while let Some(key) = parser.object_member()? {
+                    let key = alloc::string::String::from(key);
+                    let value = V::deserialize(parser)?;
+                    map.insert(key, value);
+                }
+                parser.object_end()?;
+                Ok(map)
+            }
         }
-        parser.object_end()?;
-        Ok(map)
-    }
+    };
 }
 
+#[cfg(feature = "alloc")]
+impl_deserialize_map!(
+    alloc::collections::BTreeMap<alloc::string::String, V>,
+    alloc::collections::BTreeMap::new()
+);
+
 #[cfg(feature = "std")]
-impl<'src, 'buf, V: Deserialize<'src, 'buf>> Deserialize<'src, 'buf>
-    for std::collections::HashMap<std::string::String, V>
-{
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        let mut map = std::collections::HashMap::new();
-        parser.object_begin()?;
-        while let Some(key) = parser.object_member()? {
-            let key = std::string::String::from(key);
-            let value = V::deserialize(parser)?;
-            map.insert(key, value);
-        }
-        parser.object_end()?;
-        Ok(map)
-    }
-}
+impl_deserialize_map!(
+    std::collections::HashMap<std::string::String, V>,
+    std::collections::HashMap::new()
+);
 
 // ---- Convenience free functions ----
 
