@@ -492,6 +492,20 @@ impl<K: AsRef<str> + Eq + std::hash::Hash, V: Serialize> Serialize
     }
 }
 
+#[cfg(feature = "arrayvec")]
+impl<T: Serialize, const N: usize> Serialize for arrayvec::ArrayVec<T, N> {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        self.as_slice().serialize(ser)
+    }
+}
+
+#[cfg(feature = "arrayvec")]
+impl<const N: usize> Serialize for arrayvec::ArrayString<N> {
+    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
+        ser.string(self.as_str())
+    }
+}
+
 impl Serialize for () {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
         ser.null()

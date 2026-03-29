@@ -1374,3 +1374,131 @@ fn test_hashmap_roundtrip() {
         nanojson::parse(&json).unwrap();
     assert_eq!(src, back);
 }
+
+// ============================================================
+// ---- [T; N] fixed-size arrays ----
+// ============================================================
+
+#[test]
+fn test_fixed_array_deserialize() {
+    let mut buf = [0u8; 8];
+    let arr: [i32; 3] = Deserialize::deserialize(
+        &mut Parser::new(b"[1,2,3]", &mut buf)
+    ).unwrap();
+    assert_eq!(arr, [1, 2, 3]);
+}
+
+#[test]
+fn test_fixed_array_deserialize_empty() {
+    let mut buf = [0u8; 8];
+    let arr: [i32; 0] = Deserialize::deserialize(
+        &mut Parser::new(b"[]", &mut buf)
+    ).unwrap();
+    assert_eq!(arr, []);
+}
+
+#[test]
+fn test_fixed_array_too_short() {
+    let mut buf = [0u8; 8];
+    let r: Result<[i32; 3], _> = Deserialize::deserialize(
+        &mut Parser::new(b"[1,2]", &mut buf)
+    );
+    assert!(matches!(r.unwrap_err().kind,
+        ParseErrorKind::UnexpectedToken { expected: "array item", got: "]" }
+    ));
+}
+
+#[test]
+fn test_fixed_array_too_long() {
+    let mut buf = [0u8; 8];
+    let r: Result<[i32; 2], _> = Deserialize::deserialize(
+        &mut Parser::new(b"[1,2,3]", &mut buf)
+    );
+    assert!(matches!(r.unwrap_err().kind,
+        ParseErrorKind::UnexpectedToken { expected: "]", got: "array item" }
+    ));
+}
+
+#[test]
+fn test_fixed_array_roundtrip() {
+    let src: [i64; 4] = [10, 20, 30, 40];
+    let json = nanojson::stringify(&src).unwrap();
+    assert_eq!(json, "[10,20,30,40]");
+    let back: [i64; 4] = nanojson::parse(&json).unwrap();
+    assert_eq!(src, back);
+}
+
+#[test]
+fn test_fixed_array_nested() {
+    let arr: [[i32; 2]; 2] = nanojson::parse("[[1,2],[3,4]]").unwrap();
+    assert_eq!(arr, [[1, 2], [3, 4]]);
+}
+
+// ============================================================
+// ---- arrayvec ----
+// ============================================================
+
+#[cfg(feature = "arrayvec")]
+#[test]
+fn test_arrayvec_serialize() {
+    let mut v: arrayvec::ArrayVec<i64, 4> = arrayvec::ArrayVec::new();
+    v.push(1); v.push(2); v.push(3);
+    assert_eq!(nanojson::stringify(&v).unwrap(), "[1,2,3]");
+
+    let empty: arrayvec::ArrayVec<i64, 4> = arrayvec::ArrayVec::new();
+    assert_eq!(nanojson::stringify(&empty).unwrap(), "[]");
+}
+
+#[cfg(feature = "arrayvec")]
+#[test]
+fn test_arrayvec_deserialize() {
+    let v: arrayvec::ArrayVec<i64, 8> = nanojson::parse("[1,2,3]").unwrap();
+    assert_eq!(v.as_slice(), &[1, 2, 3]);
+}
+
+#[cfg(feature = "arrayvec")]
+#[test]
+fn test_arrayvec_overflow_error() {
+    let r: Result<arrayvec::ArrayVec<i64, 2>, _> = nanojson::parse("[1,2,3]");
+    assert!(r.is_err());
+}
+
+#[cfg(feature = "arrayvec")]
+#[test]
+fn test_arrayvec_roundtrip() {
+    let mut src: arrayvec::ArrayVec<i64, 4> = arrayvec::ArrayVec::new();
+    src.push(7); src.push(8); src.push(9);
+    let json = nanojson::stringify(&src).unwrap();
+    let back: arrayvec::ArrayVec<i64, 4> = nanojson::parse(&json).unwrap();
+    assert_eq!(src, back);
+}
+
+#[cfg(feature = "arrayvec")]
+#[test]
+fn test_arraystring_serialize() {
+    let s = arrayvec::ArrayString::<16>::try_from("hello").unwrap();
+    assert_eq!(nanojson::stringify(&s).unwrap(), r#""hello""#);
+}
+
+#[cfg(feature = "arrayvec")]
+#[test]
+fn test_arraystring_deserialize() {
+    let s: arrayvec::ArrayString<16> = nanojson::parse(r#""world""#).unwrap();
+    assert_eq!(s.as_str(), "world");
+}
+
+#[cfg(feature = "arrayvec")]
+#[test]
+fn test_arraystring_overflow_error() {
+    let r: Result<arrayvec::ArrayString<3>, _> = nanojson::parse(r#""toolong""#);
+    assert!(r.is_err());
+}
+
+#[cfg(feature = "arrayvec")]
+#[test]
+fn test_arraystring_roundtrip() {
+    let src = arrayvec::ArrayString::<16>::try_from("roundtrip").unwrap();
+    let json = nanojson::stringify(&src).unwrap();
+    let back: arrayvec::ArrayString<16> = nanojson::parse(&json).unwrap();
+    assert_eq!(src, back);
+}

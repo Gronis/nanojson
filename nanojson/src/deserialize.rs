@@ -554,6 +554,78 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<
     }
 }
 
+impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, 'buf> for [T; N] {
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        use core::mem::MaybeUninit;
+
+        parser.array_begin()?;
+
+        // SAFETY: `[MaybeUninit<T>; N]` needs no initialisation itself.
+        let mut arr: [MaybeUninit<T>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+
+        for (i, slot) in arr.iter_mut().enumerate() {
+            if !parser.array_item()? {
+                // Array ended before we filled all N slots — drop what we have.
+                for prev in &mut arr[..i] { unsafe { prev.assume_init_drop(); } }
+                return Err(ParseError::at(
+                    parser.error_offset(),
+                    ParseErrorKind::UnexpectedToken { expected: "array item", got: "]" },
+                ));
+            }
+            match T::deserialize(parser) {
+                Ok(v)  => { slot.write(v); }
+                Err(e) => {
+                    for prev in &mut arr[..i] { unsafe { prev.assume_init_drop(); } }
+                    return Err(e);
+                }
+            }
+        }
+
+        // Reject arrays with more items than N.
+        if parser.array_item()? {
+            for slot in arr.iter_mut() { unsafe { slot.assume_init_drop(); } }
+            return Err(ParseError::at(
+                parser.error_offset(),
+                ParseErrorKind::UnexpectedToken { expected: "]", got: "array item" },
+            ));
+        }
+        parser.array_end()?;
+
+        // SAFETY: all N slots have been written to above.
+        Ok(arr.map(|x| unsafe { x.assume_init() }))
+    }
+}
+
+#[cfg(feature = "arrayvec")]
+impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, 'buf>
+    for arrayvec::ArrayVec<T, N>
+{
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let mut vec = arrayvec::ArrayVec::new();
+        parser.array_begin()?;
+        while parser.array_item()? {
+            let v = T::deserialize(parser)?;
+            vec.try_push(v).map_err(|_| ParseError::at(
+                parser.error_offset(),
+                ParseErrorKind::StringBufferOverflow,
+            ))?;
+        }
+        parser.array_end()?;
+        Ok(vec)
+    }
+}
+
+#[cfg(feature = "arrayvec")]
+impl<'src, 'buf, const N: usize> Deserialize<'src, 'buf> for arrayvec::ArrayString<N> {
+    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let s = parser.string()?;
+        arrayvec::ArrayString::try_from(s).map_err(|_| ParseError::at(
+            parser.error_offset(),
+            ParseErrorKind::StringBufferOverflow,
+        ))
+    }
+}
+
 #[cfg(feature = "alloc")]
 impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for alloc::vec::Vec<T> {
     fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
