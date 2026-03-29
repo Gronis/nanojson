@@ -140,7 +140,7 @@ let (x, y) = nanojson::parse_manual(json.as_bytes(), |p, buf| {
 
 ### `no_std` tier
 
-All memory on the stack. You choose `N` (output buffer size) and `STR_BUF` (string scratch size, only needs to fit the longest single field value after escape-decoding, typically 32–128 bytes).
+All memory on the stack. You choose output buffer size when stringifying, and scratch buffer size for parsing (scratch buffer only needs to fit the longest single field value after escape-decoding, typically 32–128 bytes).
 
 #### Serialization
 
