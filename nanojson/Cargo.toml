@@ -1,6 +1,6 @@
 [package]
 name = "nanojson"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "A #![no_std], allocation-free, zero-dependency JSON serializer and pull-parser."
 license = "MIT"
@@ -17,7 +17,7 @@ derive = ["nanojson-derive"]
 arrayvec = ["dep:arrayvec"]
 
 [dependencies]
-nanojson-derive = { path = "../nanojson-derive", version = "0.2.0", optional = true }
+nanojson-derive = { path = "../nanojson-derive", version = "0.3.0", optional = true }
 arrayvec = { version = "0.7", optional = true, default-features = false }
 
 [[test]]
