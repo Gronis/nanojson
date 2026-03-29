@@ -37,15 +37,17 @@ impl Token {
     }
 }
 
-/// Immediate-mode JSON parser. Borrows the source (`'src`) and a user-supplied
-/// scratch buffer (`'buf`) for string unescaping.
+/// Immediate-mode JSON parser. Borrows the source (`'src`).
+///
+/// A scratch buffer must be supplied to `string()` and `object_member()` calls
+/// for string decoding. This keeps the lifetime relationship explicit: the
+/// returned `&str` lives as long as the buffer you pass in.
 ///
 /// # Example
 /// ```
 /// use nanojson::Parser;
 /// let src = b"[1, 2, 3]";
-/// let mut str_buf = [0u8; 16];
-/// let mut p = Parser::new(src, &mut str_buf);
+/// let mut p = Parser::new(src);
 /// p.array_begin().unwrap();
 /// let mut sum = 0i64;
 /// while p.array_item().unwrap() {
@@ -54,7 +56,7 @@ impl Token {
 /// p.array_end().unwrap();
 /// assert_eq!(sum, 6);
 /// ```
-pub struct Parser<'src, 'buf> {
+pub struct Parser<'src> {
     src: &'src [u8],
     pos: usize,
     token_start: usize,
@@ -62,7 +64,6 @@ pub struct Parser<'src, 'buf> {
     /// Used by [`Parser::unknown_field`] to point at the key, not the colon.
     key_start: usize,
 
-    str_buf: &'buf mut [u8],
     str_len: usize,
 
     token: Token,
@@ -71,14 +72,13 @@ pub struct Parser<'src, 'buf> {
     number_end: usize,
 }
 
-impl<'src, 'buf> Parser<'src, 'buf> {
-    pub fn new(src: &'src [u8], str_buf: &'buf mut [u8]) -> Self {
+impl<'src> Parser<'src> {
+    pub fn new(src: &'src [u8]) -> Self {
         Self {
             src,
             pos: 0,
             token_start: 0,
             key_start: 0,
-            str_buf,
             str_len: 0,
             token: Token::Invalid,
             number_start: 0,
@@ -103,7 +103,10 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         }
     }
 
-    fn get_token(&mut self) -> Result<(), ParseError> {
+    /// Tokenize the next token. Writes decoded string bytes into `str_buf` when
+    /// the token is a string; for all other tokens `str_buf` is not used.
+    /// Pass `&mut []` when you do not expect a string token.
+    fn get_token(&mut self, str_buf: &mut [u8]) -> Result<(), ParseError> {
         self.skip_whitespace();
         self.token_start = self.pos;
 
@@ -220,26 +223,27 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                                 ));
                             }
                         };
-                        if self.str_len >= self.str_buf.len() {
+                        if self.str_len >= str_buf.len() {
                             return Err(ParseError::at(
                                 self.token_start,
                                 ParseErrorKind::StringBufferOverflow,
                             ));
                         }
-                        self.str_buf[self.str_len] = decoded;
+                        str_buf[self.str_len] = decoded;
                         self.str_len += 1;
                     }
                     _ => {
                         let b = self.src[self.pos];
                         self.pos += 1;
-                        if self.str_len >= self.str_buf.len() {
+                        if self.str_len < str_buf.len() {
+                            str_buf[self.str_len] = b;
+                            self.str_len += 1;
+                        } else if str_buf.len() > 0 {
                             return Err(ParseError::at(
                                 self.token_start,
                                 ParseErrorKind::StringBufferOverflow,
                             ));
                         }
-                        self.str_buf[self.str_len] = b;
-                        self.str_len += 1;
                     }
                 }
             }
@@ -265,21 +269,18 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         Ok(())
     }
 
+    /// Tokenize and expect a specific non-string token. Passes an empty buffer
+    /// because no string decoding is needed for structural tokens.
     fn get_and_expect(&mut self, expected: Token) -> Result<(), ParseError> {
-        self.get_token()?;
+        self.get_token(&mut [])?;
         self.expect_token(expected)
     }
 
-    /// After a successful String token, return the decoded string as a `&'buf str`.
-    fn current_string(&self) -> Result<&'buf str, ParseError> {
-        // SAFETY: `str_buf` is `&'buf mut [u8]`; its allocation lives for `'buf`.
-        // A raw-pointer round-trip sheds the `&self` borrow so we can return a
-        // reference with the correct `'buf` lifetime instead of the shorter
-        // `&self` lifetime. The first `str_len` bytes were written during
-        // decode and are valid UTF-8.
-        let bytes = unsafe {
-            core::slice::from_raw_parts(self.str_buf.as_ptr(), self.str_len)
-        };
+    /// After a successful String token, return the decoded bytes as a `&'b str`.
+    /// The lifetime `'b` is tied to `str_buf`, not to `&self`, so this is safe
+    /// with no raw pointer tricks.
+    fn current_string<'b>(&self, str_buf: &'b [u8]) -> Result<&'b str, ParseError> {
+        let bytes = &str_buf[..self.str_len];
         core::str::from_utf8(bytes).map_err(|_| {
             ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8)
         })
@@ -294,29 +295,31 @@ impl<'src, 'buf> Parser<'src, 'buf> {
 
     /// Parse the next object member key, or return `None` when `}` is reached.
     ///
-    /// On success with `Some(key)`, the key string is valid for `'buf` (the
-    /// lifetime of the scratch buffer). Copy it if you need it longer.
-    pub fn object_member(&mut self) -> Result<Option<&'buf str>, ParseError> {
+    /// The returned string is decoded into `str_buf` and is valid for `'b`
+    /// (the lifetime of the buffer). Copy it or process it before the next call
+    /// that takes a `str_buf`.
+    pub fn object_member<'b>(&mut self, str_buf: &'b mut [u8]) -> Result<Option<&'b str>, ParseError> {
         let saved_pos = self.pos;
-        self.get_token()?;
+        self.get_token(str_buf)?;
 
         match self.token {
             Token::Comma => {
-                // Subsequent member: expect key
-                self.get_and_expect(Token::String)?;
-                self.key_start = self.token_start; // capture before colon advances token_start
+                // Subsequent member: expect key string
+                self.get_token(str_buf)?;
+                self.expect_token(Token::String)?;
+                self.key_start = self.token_start;
                 self.get_and_expect(Token::Colon)?;
-                Ok(Some(self.current_string()?))
+                Ok(Some(self.current_string(str_buf)?))
             }
             Token::CloseCurly => {
                 self.pos = saved_pos;
                 Ok(None)
             }
             Token::String => {
-                // First member — token_start already points at the opening `"`
-                self.key_start = self.token_start; // capture before colon advances token_start
+                // First member — key was decoded into str_buf by get_token
+                self.key_start = self.token_start;
                 self.get_and_expect(Token::Colon)?;
-                Ok(Some(self.current_string()?))
+                Ok(Some(self.current_string(str_buf)?))
             }
             _ => Err(ParseError::at(
                 self.token_start,
@@ -353,20 +356,21 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// Check whether there is another item in the array.
     /// Returns `true` if so (consuming a `,` separator if present),
     /// `false` when `]` is reached.
+    ///
+    /// Uses fast first-character inspection so no scratch buffer is needed.
     pub fn array_item(&mut self) -> Result<bool, ParseError> {
-        let saved_pos = self.pos;
-        self.get_token()?;
-        match self.token {
-            Token::Comma => Ok(true),
-            Token::CloseBracket => {
-                self.pos = saved_pos;
-                Ok(false)
-            }
-            _ => {
-                // First item or unexpected token — rewind and let the item parser handle it.
-                self.pos = saved_pos;
+        match self.peek_token() {
+            Token::Comma => {
+                // Consume the comma
+                self.skip_whitespace();
+                self.token_start = self.pos;
+                self.pos += 1;
+                self.token = Token::Comma;
                 Ok(true)
             }
+            Token::CloseBracket => Ok(false),
+            // First item, or EOF/invalid — let the item deserializer produce the error.
+            _ => Ok(true),
         }
     }
 
@@ -382,7 +386,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
 
     /// Parse `true` or `false`, returning the value.
     pub fn bool_val(&mut self) -> Result<bool, ParseError> {
-        self.get_token()?;
+        self.get_token(&mut [])?;
         match self.token {
             Token::True  => Ok(true),
             Token::False => Ok(false),
@@ -393,13 +397,15 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         }
     }
 
-    /// Parse a JSON string. Returns a `&'buf str` backed by the scratch buffer.
+    /// Parse a JSON string, decoding escape sequences into `str_buf`.
     ///
-    /// The returned string is valid for `'buf` (the lifetime of the scratch buffer).
-    /// It is overwritten on the next call to `string()` or `object_member()`.
-    pub fn string(&mut self) -> Result<&'buf str, ParseError> {
-        self.get_and_expect(Token::String)?;
-        self.current_string()
+    /// The returned `&'b str` is valid for the lifetime of `str_buf`. It is
+    /// overwritten on the next call to `string()` or `object_member()` that
+    /// uses the same buffer.
+    pub fn string<'b>(&mut self, str_buf: &'b mut [u8]) -> Result<&'b str, ParseError> {
+        self.get_token(str_buf)?;
+        self.expect_token(Token::String)?;
+        self.current_string(str_buf)
     }
 
     /// Parse a JSON number and return the raw source bytes as a `&'src str`.
@@ -415,54 +421,70 @@ impl<'src, 'buf> Parser<'src, 'buf> {
 
     // ---- lookahead ----
 
-    fn peek_token(&mut self) -> Token {
-        let saved_pos = self.pos;
-        let saved_token_start = self.token_start;
-        let saved_token = self.token;
-        let _ = self.get_token();
-        let peeked = self.token;
-        self.pos = saved_pos;
-        self.token_start = saved_token_start;
-        self.token = saved_token;
-        peeked
+    /// Peek at the type of the next token without advancing the parser.
+    /// Inspects only the first non-whitespace byte, so no scratch buffer is needed.
+    fn peek_token(&self) -> Token {
+        let mut i = self.pos;
+        while i < self.src.len() && matches!(self.src[i], b' ' | b'\t' | b'\n' | b'\r') {
+            i += 1;
+        }
+        if i >= self.src.len() { return Token::Eof; }
+        match self.src[i] {
+            b'{' => Token::OpenCurly,
+            b'}' => Token::CloseCurly,
+            b'[' => Token::OpenBracket,
+            b']' => Token::CloseBracket,
+            b',' => Token::Comma,
+            b':' => Token::Colon,
+            b'"' => Token::String,
+            b't' => Token::True,
+            b'f' => Token::False,
+            b'n' => Token::Null,
+            b'-' | b'0'..=b'9' => Token::Number,
+            _ => Token::Invalid,
+        }
     }
 
-    pub fn is_null_ahead(&mut self) -> bool   { self.peek_token() == Token::Null }
-    pub fn is_bool_ahead(&mut self) -> bool   { matches!(self.peek_token(), Token::True | Token::False) }
-    pub fn is_number_ahead(&mut self) -> bool { self.peek_token() == Token::Number }
-    pub fn is_string_ahead(&mut self) -> bool { self.peek_token() == Token::String }
-    pub fn is_array_ahead(&mut self) -> bool  { self.peek_token() == Token::OpenBracket }
-    pub fn is_object_ahead(&mut self) -> bool { self.peek_token() == Token::OpenCurly }
+    pub fn is_null_ahead(&self) -> bool   { self.peek_token() == Token::Null }
+    pub fn is_bool_ahead(&self) -> bool   { matches!(self.peek_token(), Token::True | Token::False) }
+    pub fn is_number_ahead(&self) -> bool { self.peek_token() == Token::Number }
+    pub fn is_string_ahead(&self) -> bool { self.peek_token() == Token::String }
+    pub fn is_array_ahead(&self) -> bool  { self.peek_token() == Token::OpenBracket }
+    pub fn is_object_ahead(&self) -> bool { self.peek_token() == Token::OpenCurly }
 }
 
 /// Trait for types that can deserialize themselves from JSON using a [`Parser`].
+///
+/// `'src` is the lifetime of the JSON source bytes. `'buf` is the lifetime of
+/// the scratch buffer used for string decoding. Owned types implement
+/// `for<'s, 'b> Deserialize<'s, 'b>`.
 pub trait Deserialize<'src, 'buf>: Sized {
-    fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError>;
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError>;
 }
 
 impl<'src, 'buf> Deserialize<'src, 'buf> for bool {
-    fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        json.bool_val()
+    fn deserialize(parser: &mut Parser<'src>, _str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
+        parser.bool_val()
     }
 }
 
 impl<'src, 'buf> Deserialize<'src, 'buf> for &'buf str {
-    fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        json.string()
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
+        parser.string(str_buf)
     }
 }
 
 #[cfg(feature = "alloc")]
 impl<'src, 'buf> Deserialize<'src, 'buf> for alloc::string::String {
-    fn deserialize(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        Ok(alloc::string::String::from(json.string()?))
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
+        Ok(alloc::string::String::from(parser.string(str_buf)?))
     }
 }
 
 macro_rules! impl_float {
     ($($t:ty),*) => {$(
         impl<'src, 'buf> Deserialize<'src, 'buf> for $t {
-            fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+            fn deserialize(parser: &mut Parser<'src>, _str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
                 let s = parser.number_str()?;
                 let offset = parser.error_offset();
                 s.parse::<$t>().map_err(|_| ParseError::at(
@@ -478,9 +500,7 @@ impl_float!(f32, f64);
 macro_rules! impl_integer {
     ($($t:ty),*) => {$(
         impl<'src, 'buf> Deserialize<'src, 'buf> for $t {
-            fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-                // Read the number as a raw string and parse it.
-                // integer_from_str is hand-rolled to stay no_std.
+            fn deserialize(parser: &mut Parser<'src>, _str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
                 let s = parser.number_str()?;
                 integer_from_str::<$t>(s, parser.token_start)
             }
@@ -538,18 +558,21 @@ impl_int_parse!(signed:   i8, i16, i32, i64, i128, isize);
 impl_int_parse!(unsigned: u8, u16, u32, u64, u128, usize);
 
 impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<T> {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
         if parser.is_null_ahead() {
             parser.null()?;
             Ok(None)
         } else {
-            T::deserialize(parser).map(Some)
+            T::deserialize(parser, str_buf).map(Some)
         }
     }
 }
 
-impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, 'buf> for [T; N] {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+impl<'src, 'buf, T, const N: usize> Deserialize<'src, 'buf> for [T; N]
+where
+    T: for<'x> Deserialize<'src, 'x>,
+{
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
         parser.array_begin()?;
 
         let mut arr: [Option<T>; N] = [(); N].map(|_| None);
@@ -561,7 +584,9 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, '
                     ParseErrorKind::UnexpectedToken { expected: "array item", got: "]" },
                 ));
             }
-            arr[i] = Some(T::deserialize(parser)?);
+            // `&mut *str_buf` creates a fresh shorter-lived reborrow so NLL can
+            // release it after the call (T: for<'x> ensures T doesn't capture it).
+            arr[i] = Some(T::deserialize(parser, &mut *str_buf)?);
         }
 
         // Reject arrays with more items than N.
@@ -573,21 +598,23 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, '
         }
         parser.array_end()?;
 
-        // SAFETY: every element was set to `Some(...)` by the loop above.
-        // Using `unwrap_unchecked` avoids a panic branch in library code.
-        Ok(arr.map(|x| unsafe { x.unwrap_unchecked() }))
+        // Every element was set to `Some(...)` by the loop above — unwrap is
+        // dead code (the loop invariant guarantees all slots are filled).
+        // `array::try_from_fn` would be the ideal solution but is nightly-only.
+        Ok(arr.map(|x| x.unwrap()))
     }
 }
 
 #[cfg(feature = "arrayvec")]
-impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, 'buf>
-    for arrayvec::ArrayVec<T, N>
+impl<'src, 'buf, T, const N: usize> Deserialize<'src, 'buf> for arrayvec::ArrayVec<T, N>
+where
+    T: for<'x> Deserialize<'src, 'x>,
 {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
         let mut vec = arrayvec::ArrayVec::new();
         parser.array_begin()?;
         while parser.array_item()? {
-            let v = T::deserialize(parser)?;
+            let v = T::deserialize(parser, &mut *str_buf)?;
             vec.try_push(v).map_err(|_| ParseError::at(
                 parser.error_offset(),
                 ParseErrorKind::StringBufferOverflow,
@@ -600,8 +627,8 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>, const N: usize> Deserialize<'src, '
 
 #[cfg(feature = "arrayvec")]
 impl<'src, 'buf, const N: usize> Deserialize<'src, 'buf> for arrayvec::ArrayString<N> {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        let s = parser.string()?;
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
+        let s = parser.string(str_buf)?;
         arrayvec::ArrayString::try_from(s).map_err(|_| ParseError::at(
             parser.error_offset(),
             ParseErrorKind::StringBufferOverflow,
@@ -610,12 +637,15 @@ impl<'src, 'buf, const N: usize> Deserialize<'src, 'buf> for arrayvec::ArrayStri
 }
 
 #[cfg(feature = "alloc")]
-impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for alloc::vec::Vec<T> {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+impl<'src, 'buf, T> Deserialize<'src, 'buf> for alloc::vec::Vec<T>
+where
+    T: for<'x> Deserialize<'src, 'x>,
+{
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
         let mut vec = alloc::vec::Vec::new();
         parser.array_begin()?;
         while parser.array_item()? {
-            vec.push(T::deserialize(parser)?);
+            vec.push(T::deserialize(parser, &mut *str_buf)?);
         }
         parser.array_end()?;
         Ok(vec)
@@ -624,20 +654,29 @@ impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for alloc::
 
 #[cfg(feature = "alloc")]
 impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for alloc::boxed::Box<T> {
-    fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
-        T::deserialize(parser).map(alloc::boxed::Box::new)
+    fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
+        T::deserialize(parser, str_buf).map(alloc::boxed::Box::new)
     }
 }
 
 macro_rules! impl_deserialize_map {
     ($map_ty:ty, $new:expr) => {
-        impl<'src, 'buf, V: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for $map_ty {
-            fn deserialize(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        impl<'src, 'buf, V> Deserialize<'src, 'buf> for $map_ty
+        where
+            V: for<'x> Deserialize<'src, 'x>,
+        {
+            fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
                 let mut map = $new;
                 parser.object_begin()?;
-                while let Some(key) = parser.object_member()? {
-                    let key = alloc::string::String::from(key);
-                    let value = V::deserialize(parser)?;
+                // Explicit loop so NLL can see the borrow from object_member ends
+                // after String::from(k) before the next reborrow.
+                loop {
+                    let maybe_key = parser.object_member(&mut *str_buf)?;
+                    let key = match maybe_key {
+                        None => break,
+                        Some(k) => alloc::string::String::from(k),
+                    };
+                    let value = V::deserialize(parser, &mut *str_buf)?;
                     map.insert(key, value);
                 }
                 parser.object_end()?;
@@ -663,12 +702,15 @@ impl_deserialize_map!(
 
 /// Parse using a hand-written closure with a stack-allocated scratch buffer of `STR_BUF` bytes.
 ///
+/// The closure receives both a `&mut Parser` and a `&mut [u8]` scratch buffer.
+/// Pass the buffer to `string()` and `object_member()` calls.
+///
 /// # Example
 /// ```
-/// let (x, y) = nanojson::parse_manual_sized::<16, _>(b"{\"x\":3,\"y\":4}", |p| {
+/// let (x, y) = nanojson::parse_manual_sized::<16, _>(b"{\"x\":3,\"y\":4}", |p, buf| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
-///     while let Some(k) = p.object_member()? {
+///     while let Some(k) = p.object_member(buf)? {
 ///         match k {
 ///             "x" => x = p.number_str()?.parse().unwrap(),
 ///             "y" => y = p.number_str()?.parse().unwrap(),
@@ -680,13 +722,13 @@ impl_deserialize_map!(
 /// }).unwrap();
 /// assert_eq!((x, y), (3, 4));
 /// ```
-pub fn parse_manual_sized<'s, const STR_BUF: usize, T>(
+pub fn parse_manual_sized<const STR_BUF: usize, T>(
     src: &[u8],
-    f: impl for<'a, 'b> FnOnce(&mut Parser<'a, 'b>) -> Result<T, ParseError>,
+    f: impl for<'a, 'b> FnOnce(&mut Parser<'a>, &'b mut [u8]) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {
     let mut scratch = [0u8; STR_BUF];
-    let mut parser = Parser::new(src, scratch.as_mut_slice());
-    f(&mut parser)
+    let mut parser = Parser::new(src);
+    f(&mut parser, &mut scratch)
 }
 
 /// Deserialize a `T: Deserialize` value with a stack-allocated scratch buffer of `STR_BUF` bytes.
@@ -704,7 +746,7 @@ where
     T: for<'b> Deserialize<'s, 'b>,
 {
     let mut buf = [0u8; STR_BUF];
-    T::deserialize(&mut Parser::new(src, &mut buf))
+    T::deserialize(&mut Parser::new(src), &mut buf)
 }
 
 /// Deserialize a fully-owned type from raw bytes.
@@ -723,7 +765,7 @@ where
     T: for<'s, 'b> Deserialize<'s, 'b>,
 {
     let mut scratch = std::vec![0u8; src.len().max(1)];
-    T::deserialize(&mut Parser::new(src, scratch.as_mut_slice()))
+    T::deserialize(&mut Parser::new(src), scratch.as_mut_slice())
 }
 
 /// Deserialize a fully-owned type from a `&str`.
@@ -747,12 +789,15 @@ where
 /// The scratch buffer is sized to `src.len()` (safe upper bound for string decoding).
 /// `T` must be a fully owned type (no borrows from the parser).
 ///
+/// The closure receives both a `&mut Parser` and a `&mut [u8]` scratch buffer.
+/// Pass the buffer to `string()` and `object_member()` calls.
+///
 /// # Example
 /// ```
-/// let (x, y) = nanojson::parse_manual(b"{\"x\":3,\"y\":4}", |p| {
+/// let (x, y) = nanojson::parse_manual(b"{\"x\":3,\"y\":4}", |p, buf| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
-///     while let Some(k) = p.object_member()? {
+///     while let Some(k) = p.object_member(buf)? {
 ///         match k {
 ///             "x" => x = p.number_str()?.parse().unwrap(),
 ///             "y" => y = p.number_str()?.parse().unwrap(),
@@ -768,9 +813,9 @@ where
 #[inline]
 pub fn parse_manual<T>(
     src: &[u8],
-    f: impl for<'a, 'b> FnOnce(&mut Parser<'a, 'b>) -> Result<T, ParseError>,
+    f: impl for<'a, 'b> FnOnce(&mut Parser<'a>, &'b mut [u8]) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {
     let mut scratch = std::vec![0u8; src.len().max(1)];
-    let mut parser = Parser::new(src, scratch.as_mut_slice());
-    f(&mut parser)
+    let mut parser = Parser::new(src);
+    f(&mut parser, &mut scratch)
 }

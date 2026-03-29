@@ -104,7 +104,7 @@ impl From<nanojson::ParseError> for ParseTreeError {
 /// Rust's call stack until it overflows — undefined behavior on bare-metal,
 /// a crash with std. Tracking depth here keeps failure predictable.
 fn parse_tree(
-    parser: &mut Parser<'_, '_>,
+    parser: &mut Parser,
     current_depth: usize,
     max_depth: usize,
 ) -> Result<Tree, ParseTreeError> {
@@ -168,7 +168,7 @@ fn main() {
         write_tree(&deep, &mut ser).unwrap();
         let vec = ser.into_writer();
         // SAFETY: the serializer only writes ASCII JSON tokens (all valid UTF-8).
-        let json = unsafe { std::string::String::from_utf8_unchecked(vec) };
+        let json = std::string::String::from_utf8(vec).unwrap();
         std::println!("\nDeep tree (50 levels) with DEPTH=64: {} bytes serialized.", json.len());
     }
 
@@ -204,8 +204,7 @@ fn main() {
     std::println!("\nSource JSON (10 deep, first 40 chars): {:.40}...", &src_10);
 
     // 4a. Generous limit — succeeds.
-    let mut str_buf = [0u8; 32];
-    let mut parser = Parser::new(src_10.as_bytes(), &mut str_buf);
+    let mut parser = Parser::new(src_10.as_bytes());
     match parse_tree(&mut parser, 0, 20) {
         Ok(tree) => std::println!(
             "Parsed (limit=20, actual depth=10): {} leaf/leaves found.",
@@ -215,8 +214,7 @@ fn main() {
     }
 
     // 4b. Tight limit — fails with NestingTooDeep.
-    let mut str_buf = [0u8; 32];
-    let mut parser = Parser::new(src_10.as_bytes(), &mut str_buf);
+    let mut parser = Parser::new(src_10.as_bytes());
     match parse_tree(&mut parser, 0, 5) {
         Ok(_) => std::println!("Unexpectedly parsed."),
         Err(ParseTreeError::NestingTooDeep { limit }) => {
@@ -231,8 +229,7 @@ fn main() {
     // ------------------------------------------------------------------
     let fitting = Tree::nested(30, 5);
     let json = nanojson::stringify(&fitting).unwrap();
-    let mut str_buf = [0u8; 16];
-    let mut parser = Parser::new(json.as_bytes(), &mut str_buf);
+    let mut parser = Parser::new(json.as_bytes());
     let parsed = parse_tree(&mut parser, 0, 32).unwrap();
     assert_eq!(parsed.leaf_count(), 1);
     std::println!("\nRound-trip (30 deep, default limits): OK.");

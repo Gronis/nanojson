@@ -165,7 +165,8 @@ pub(crate) fn gen_deserialize(item: &ParsedItem) -> Result<TokenStream, TokenStr
         {where_clause}
         {{
             fn deserialize(
-                __json: &mut ::nanojson::Parser<'__src, '__buf>,
+                __json: &mut ::nanojson::Parser<'__src>,
+                __str_buf: &'__buf mut [u8],
                 ) -> ::core::result::Result<Self, ::nanojson::ParseError> {{
                 {body}
             }}
@@ -215,14 +216,14 @@ fn gen_deserialize_object_fields(
     let expected_fields_expr = format!("&[{field_names}]");
 
     code.push_str("__json.object_begin()?;");
-    code.push_str("while let ::core::option::Option::Some(__key) = __json.object_member()? {");
+    code.push_str("while let ::core::option::Option::Some(__key) = __json.object_member(__str_buf)? {");
     code.push_str("match __key {");
     for f in fields {
         let fname = &f.name;
         let jname = escape_rust_str(&f.json_name);
         code.push_str(&format!(
             "{jname} => {{ {fname} = ::core::option::Option::Some(\
-                ::nanojson::Deserialize::deserialize(__json)?\
+                ::nanojson::Deserialize::deserialize(__json, __str_buf)?\
             ); }}"
         ));
     }
@@ -277,7 +278,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
     let tn = escape_rust_str(name);
 
     if all_unit {
-        code.push_str("let __tag = __json.string()?;");
+        code.push_str("let __tag = __json.string(__str_buf)?;");
         code.push_str("match __tag {");
         for v in variants {
             let vname = &v.name;
@@ -300,7 +301,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
 
         // ---- string path: only unit variants are valid here ----
         code.push_str("if __json.is_string_ahead() {");
-        code.push_str("let __tag = __json.string()?;");
+        code.push_str("let __tag = __json.string(__str_buf)?;");
         code.push_str("match __tag {");
         for v in variants {
             if matches!(v.fields, VariantFields::Unit) {
@@ -335,7 +336,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
         // ---- object path: struct variants + optional {"Unit": null} ----
         code.push_str("} else {");
         code.push_str("__json.object_begin()?;");
-        code.push_str("let __result = if let ::core::option::Option::Some(__tag) = __json.object_member()? {");
+        code.push_str("let __result = if let ::core::option::Option::Some(__tag) = __json.object_member(__str_buf)? {");
         code.push_str("match __tag {");
         for v in variants {
             let vname = &v.name;

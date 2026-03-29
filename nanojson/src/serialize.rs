@@ -48,6 +48,8 @@ pub enum SerializeError<E> {
     /// `member_key` / `member_key_bytes` was called outside an object scope,
     /// or was called twice without an intervening value.
     InvalidState,
+    /// The serializer generated invalid UTF-8 at some point.
+    InvalidUtf8(usize),
     /// A value cannot be represented as JSON (e.g. a NaN or infinite float).
     InvalidValue(&'static str),
 }
@@ -61,10 +63,11 @@ impl<E> From<E> for SerializeError<E> {
 impl<E: core::fmt::Display> core::fmt::Display for SerializeError<E> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            SerializeError::Write(e)       => write!(f, "write error: {e}"),
-            SerializeError::DepthExceeded  => f.write_str("nesting depth exceeded"),
-            SerializeError::InvalidState   => f.write_str("invalid serializer call order"),
-            SerializeError::InvalidValue(m) => write!(f, "invalid value: {m}"),
+            Self::Write(e)          => write!(f, "write error: {e}"),
+            Self::DepthExceeded     => f.write_str("nesting depth exceeded"),
+            Self::InvalidState      => f.write_str("invalid serializer call order"),
+            Self::InvalidValue(m)   => write!(f, "invalid value: {m}"),
+            Self::InvalidUtf8(off)  => write!(f, "invalid utf-8 generated at: {off}"),
         }
     }
 }
@@ -749,8 +752,9 @@ pub fn stringify_manual(
     let mut ser: Serializer<_> = Serializer::new(std::vec::Vec::new());
     f(&mut ser)?;
     let vec = ser.into_writer();
-    // SAFETY: the serializer internal functions always write valid UTF-8.
-    Ok(unsafe { std::string::String::from_utf8_unchecked(vec) })
+    std::string::String::from_utf8(vec).map_err(
+        |e| SerializeError::InvalidUtf8(e.utf8_error().error_len().unwrap_or(0))
+    )
 }
 
 /// Serialize a value into a pretty-printed heap-allocated [`String`].
@@ -791,8 +795,9 @@ pub fn stringify_manual_pretty(
     let mut ser: Serializer<_> = Serializer::with_pp(std::vec::Vec::new(), indent);
     f(&mut ser)?;
     let vec = ser.into_writer();
-    // SAFETY: the serializer internal functions always write valid UTF-8.
-    Ok(unsafe { std::string::String::from_utf8_unchecked(vec) })
+    std::string::String::from_utf8(vec).map_err(
+        |e| SerializeError::InvalidUtf8(e.utf8_error().error_len().unwrap_or(0))
+    )
 }
 
 #[cfg(feature = "std")]

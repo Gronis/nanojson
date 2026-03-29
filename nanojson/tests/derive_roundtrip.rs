@@ -121,8 +121,8 @@ where
 {
     let json = serialize_val(val);
     let mut buf = [0u8; 128];
-    let mut json = Parser::new(&json, &mut buf);
-    T::deserialize(&mut json).expect("deserialization failed")
+    let mut json = Parser::new(&json);
+    T::deserialize(&mut json, &mut buf).expect("deserialization failed")
 }
 
 // ============================================================
@@ -264,8 +264,8 @@ fn test_renamed_enum_roundtrip() {
     let json = serialize_val(&Direction::East);
     assert_eq!(as_str(&json), "\"east\"");
     let mut buf = [0u8; 32];
-    let mut json = Parser::new(&json, &mut buf);
-    assert_eq!(Direction::deserialize(&mut json).unwrap(), Direction::East);
+    let mut json = Parser::new(&json);
+    assert_eq!(Direction::deserialize(&mut json, &mut buf).unwrap(), Direction::East);
 }
 
 // ============================================================
@@ -279,18 +279,18 @@ fn test_renamed_enum_roundtrip() {
 fn test_manual_string_deserialize() {
     let src = br#"{"label":"world","count":5}"#;
     let mut str_buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut str_buf);
+    let mut json = Parser::new(src);
 
     let mut label_bytes = [0u8; 16];
     let mut label_len = 0usize;
     let mut count = 0i64;
 
     json.object_begin().unwrap();
-    while let Some(key) = json.object_member().unwrap() {
+    while let Some(key) = json.object_member(&mut str_buf).unwrap() {
         let k = key.to_owned();
         match k.as_str() {
             "label" => {
-                let s = json.string().unwrap();
+                let s = json.string(&mut str_buf).unwrap();
                 label_len = s.len();
                 label_bytes[..label_len].copy_from_slice(s.as_bytes());
             }
@@ -310,18 +310,18 @@ fn test_manual_string_deserialize() {
 fn test_manual_escaped_string_deserialize() {
     let src = br#"{"label":"hello\nworld","count":1}"#;
     let mut str_buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut str_buf);
+    let mut json = Parser::new(src);
 
     let mut label_bytes = [0u8; 32];
     let mut label_len = 0usize;
     let mut count = 0i64;
 
     json.object_begin().unwrap();
-    while let Some(key) = json.object_member().unwrap() {
+    while let Some(key) = json.object_member(&mut str_buf).unwrap() {
         let k = key.to_owned();
         match k.as_str() {
             "label" => {
-                let s = json.string().unwrap();
+                let s = json.string(&mut str_buf).unwrap();
                 label_len = s.len();
                 label_bytes[..label_len].copy_from_slice(s.as_bytes());
             }
@@ -343,12 +343,12 @@ fn test_manual_escaped_string_deserialize() {
 
 /// Manually parse an arbitrarily deep nested object (no derive needed).
 /// Walks depth-first, counting all integer leaf values found.
-fn sum_leaf_integers(json: &mut Parser<'_, '_>) -> i64 {
+fn sum_leaf_integers(json: &mut Parser<'_>, buf: &mut [u8]) -> i64 {
     if json.is_object_ahead() {
         let mut total = 0i64;
         json.object_begin().unwrap();
-        while let Some(_key) = json.object_member().unwrap() {
-            total += sum_leaf_integers(json);
+        while let Some(_key) = json.object_member(buf).unwrap() {
+            total += sum_leaf_integers(json, buf);
         }
         json.object_end().unwrap();
         total
@@ -356,7 +356,7 @@ fn sum_leaf_integers(json: &mut Parser<'_, '_>) -> i64 {
         let mut total = 0i64;
         json.array_begin().unwrap();
         while json.array_item().unwrap() {
-            total += sum_leaf_integers(json);
+            total += sum_leaf_integers(json, buf);
         }
         json.array_end().unwrap();
         total
@@ -370,7 +370,7 @@ fn sum_leaf_integers(json: &mut Parser<'_, '_>) -> i64 {
         json.bool_val().unwrap();
         0
     } else if json.is_string_ahead() {
-        json.string().unwrap();
+        json.string(buf).unwrap();
         0
     } else {
         panic!("unexpected token");
@@ -382,16 +382,16 @@ fn test_recursive_sum_nested() {
     // Sum all integer leaf values in a nested structure.
     let src = br#"{"a":1,"b":{"c":2,"d":{"e":3}},"f":4}"#;
     let mut buf = [0u8; 32];
-    let mut json = Parser::new(src, &mut buf);
-    assert_eq!(sum_leaf_integers(&mut json), 10); // 1+2+3+4
+    let mut json = Parser::new(src);
+    assert_eq!(sum_leaf_integers(&mut json, &mut buf), 10); // 1+2+3+4
 }
 
 #[test]
 fn test_recursive_sum_array_of_objects() {
     let src = br#"[{"x":10,"y":20},{"x":1,"y":2},{"x":100}]"#;
     let mut buf = [0u8; 32];
-    let mut json = Parser::new(src, &mut buf);
-    assert_eq!(sum_leaf_integers(&mut json), 133); // 10+20+1+2+100
+    let mut json = Parser::new(src);
+    assert_eq!(sum_leaf_integers(&mut json, &mut buf), 133); // 10+20+1+2+100
 }
 
 #[test]
@@ -399,8 +399,8 @@ fn test_recursive_sum_mixed() {
     // Mix of nulls, bools, strings, and integers.
     let src = br#"{"a":null,"b":true,"c":"hello","d":42,"e":[1,2,3]}"#;
     let mut buf = [0u8; 32];
-    let mut json = Parser::new(src, &mut buf);
-    assert_eq!(sum_leaf_integers(&mut json), 48); // 42+1+2+3
+    let mut json = Parser::new(src);
+    assert_eq!(sum_leaf_integers(&mut json, &mut buf), 48); // 42+1+2+3
 }
 
 /// Serialize a derived struct that itself contains another derived struct,
@@ -430,8 +430,8 @@ fn test_deeply_nested_derived_roundtrip() {
 fn test_missing_field_error() {
     let src = br#"{"x":5}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let result = Point::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = Point::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField { .. }, .. })
@@ -442,8 +442,8 @@ fn test_missing_field_error() {
 fn test_unknown_field_error() {
     let src = br#"{"x":1,"y":2,"z":3}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let result = Point::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = Point::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
@@ -454,8 +454,8 @@ fn test_unknown_field_error() {
 fn test_unknown_field_error_carries_metadata() {
     let src = br#"{"x":1,"y":2,"z":3}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let err = Point::deserialize(&mut json).unwrap_err();
+    let mut json = Parser::new(src);
+    let err = Point::deserialize(&mut json, &mut buf).unwrap_err();
     if let nanojson::ParseErrorKind::UnknownField { type_name, expected_fields } = err.kind {
         assert_eq!(type_name, "Point");
         assert!(expected_fields.contains(&"x"));
@@ -470,8 +470,8 @@ fn test_missing_nested_field_error() {
     // Outer struct present but inner Address is missing zip field.
     let src = br#"{"age":1,"active":true,"address":{"street_num":5}}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let result = Person::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = Person::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField { .. }, .. })
@@ -482,8 +482,8 @@ fn test_missing_nested_field_error() {
 fn test_unknown_field_in_nested_error() {
     let src = br#"{"age":1,"active":false,"address":{"street_num":1,"zip":2,"extra":3}}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let result = Person::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = Person::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
@@ -582,14 +582,14 @@ fn test_stringify_manual_closure() {
 #[test]
 fn test_parse_manual_closure() {
     let src = br#"{"x":3,"y":4}"#;
-    let p = nanojson::parse_manual::<Point>(src, |parser| Point::deserialize(parser)).unwrap();
+    let p = nanojson::parse_manual::<Point>(src, |parser, buf| Point::deserialize(parser, buf)).unwrap();
     assert_eq!(p, Point { x: 3, y: 4 });
 }
 
 #[test]
 fn test_parse_manual_sized_closure() {
     let src = br#"{"x":3,"y":4}"#;
-    let p = nanojson::parse_manual_sized::<256, Point>(src, |parser| Point::deserialize(parser)).unwrap();
+    let p = nanojson::parse_manual_sized::<256, Point>(src, |parser, buf| Point::deserialize(parser, buf)).unwrap();
     assert_eq!(p, Point { x: 3, y: 4 });
 }
 
@@ -635,8 +635,8 @@ fn test_wrong_type_for_field_error() {
     // x is not an integer.
     let src = br#"{"x":true,"y":2}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let result = Point::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = Point::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnexpectedToken { .. }, .. })
@@ -647,8 +647,8 @@ fn test_wrong_type_for_field_error() {
 fn test_enum_unknown_variant_error() {
     let src = br#""InvalidDirection""#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let result = Direction::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = Direction::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
@@ -659,8 +659,8 @@ fn test_enum_unknown_variant_error() {
 fn test_struct_enum_unknown_variant_error() {
     let src = br#"{"Triangle":{"base":3,"height":4}}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let result = Shape::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = Shape::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
@@ -747,12 +747,12 @@ fn test_option_wrong_type_error() {
     // y field expects i64 or null, but gets a string.
     let src = br#"{"x":1,"y":"not_a_number"}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let result = MaybePoint::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = MaybePoint::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnexpectedToken { .. }, .. })
-    ));
+    ), "got {:?}", result);
 }
 
 #[test]
@@ -761,8 +761,8 @@ fn test_error_offset_missing_field() {
     // The offset should point somewhere in the JSON, not 0.
     let src = br#"{"x":5}"#;
     let mut buf = [0u8; 64];
-    let mut json = Parser::new(src, &mut buf);
-    let err = Point::deserialize(&mut json).unwrap_err();
+    let mut json = Parser::new(src);
+    let err = Point::deserialize(&mut json, &mut buf).unwrap_err();
     assert!(matches!(err.kind, nanojson::ParseErrorKind::MissingField { .. }));
     // The error offset must be a valid byte position within src.
     assert!(err.offset <= src.len(), "offset {} out of bounds", err.offset);
@@ -772,8 +772,8 @@ fn test_error_offset_missing_field() {
 fn test_empty_object_missing_all_fields_error() {
     let src = br#"{}"#;
     let mut buf = [0u8; 32];
-    let mut json = Parser::new(src, &mut buf);
-    let result = Point::deserialize(&mut json);
+    let mut json = Parser::new(src);
+    let result = Point::deserialize(&mut json, &mut buf);
     assert!(matches!(
         result,
         Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::MissingField { .. }, .. })

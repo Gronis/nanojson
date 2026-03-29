@@ -52,9 +52,9 @@ fn main() {
     let mut active = false;
     let mut level = 0i64;
 
-    nanojson::parse_manual(json.as_bytes(), |p| {
+    nanojson::parse_manual(json.as_bytes(), |p, buf| {
         p.object_begin()?;
-        while let Some(key) = p.object_member()? {
+        while let Some(key) = p.object_member(buf)? {
             // Copy key before the next parse call overwrites the scratch buffer.
             let mut key_buf = [0u8; 16];
             let klen = key.len();
@@ -62,7 +62,7 @@ fn main() {
 
             match core::str::from_utf8(&key_buf[..klen]).unwrap() {
                 "name" => {
-                    let s = p.string()?;
+                    let s = p.string(buf)?;
                     name_len = s.len();
                     name_bytes[..name_len].copy_from_slice(s.as_bytes());
                 }
@@ -76,7 +76,7 @@ fn main() {
                 }
                 "meta" => {
                     p.object_begin()?;
-                    while let Some(mk) = p.object_member()? {
+                    while let Some(mk) = p.object_member(buf)? {
                         let mut mb = [0u8; 16];
                         let ml = mk.len();
                         mb[..ml].copy_from_slice(mk.as_bytes());
@@ -143,17 +143,17 @@ fn main() {
     let mut level = 0i64;
 
     let mut str_buf = [0u8; 64];
-    let mut p = Parser::new(json_bytes, &mut str_buf);
+    let mut p = Parser::new(json_bytes);
 
     p.object_begin().unwrap();
-    while let Some(key) = p.object_member().unwrap() {
+    while let Some(key) = p.object_member(&mut str_buf).unwrap() {
         let mut kb = [0u8; 16];
         let kl = key.len();
         kb[..kl].copy_from_slice(key.as_bytes());
 
         match core::str::from_utf8(&kb[..kl]).unwrap() {
             "name" => {
-                let s = p.string().unwrap();
+                let s = p.string(&mut str_buf).unwrap();
                 name_len = s.len();
                 name_bytes[..name_len].copy_from_slice(s.as_bytes());
             }
@@ -167,7 +167,7 @@ fn main() {
             }
             "meta" => {
                 p.object_begin().unwrap();
-                while let Some(mk) = p.object_member().unwrap() {
+                while let Some(mk) = p.object_member(&mut str_buf).unwrap() {
                     let mut mb = [0u8; 16];
                     let ml = mk.len();
                     mb[..ml].copy_from_slice(mk.as_bytes());

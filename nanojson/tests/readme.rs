@@ -62,10 +62,10 @@ fn test_readme_impl() -> Result<(), Error> {
 
     // Closure form for manual parsing
     let json = r#"{"x": 3, "y": 4}"#;
-    let (x, y) = nanojson::parse_manual(json.as_bytes(), |p| {
+    let (x, y) = nanojson::parse_manual(json.as_bytes(), |p, buf| {
         p.object_begin()?;
         let mut x = 0i64; let mut y = 0i64;
-        while let Some(k) = p.object_member()? {
+        while let Some(k) = p.object_member(buf)? {
             match k {
                 "x" => x = p.number_str()?.parse().unwrap(),
                 "y" => y = p.number_str()?.parse().unwrap(),
@@ -101,10 +101,10 @@ fn test_readme_impl() -> Result<(), Error> {
 
     // Low-level parser for hand-written code
     let json = r#"{"x": 3, "y": 4}"#.as_bytes();
-    let (x, y) = nanojson::parse_manual_sized::<64, _>(json, |p| {
+    let (x, y) = nanojson::parse_manual_sized::<64, _>(json, |p, buf| {
         p.object_begin()?;
         let mut x = 0i64; let mut y = 0i64;
-        while let Some(k) = p.object_member()? {
+        while let Some(k) = p.object_member(buf)? {
             match k {
                 "x" => x = p.number_str()?.parse().unwrap(),
                 "y" => y = p.number_str()?.parse().unwrap(),
