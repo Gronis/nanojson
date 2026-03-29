@@ -1,6 +1,6 @@
 # nanojson
 
-nanojson is a JSON serializer and pull-parser with **zero dependencies**. No `serde`, no `syn`, no `proc-macro2` — it adds nothing to your build graph. The derive macros are hand-rolled without any macro-writing libraries, so they compile instantly. The API is immediate-mode: you call methods to produce JSON and call methods to consume it, one value at a time. No intermediate tree, no `Value` type, no dynamic dispatch.
+nanojson is a **zero-dependency**, `no-std` compatible JSON serializer and pull-parser with hand-written derives (no `serde`, no `pro-macro2`). It uses an immediate-mode API, validating your schema while parsing. 
 
 ```rust
 // Annotate your types once:
@@ -12,7 +12,7 @@ let json: String = nanojson::stringify(&Point { x: 3, y: 4 })?;
 let point: Point = nanojson::parse(&json)?;
 ```
 
-Works with `std` (default — ergonomic one-liners) and without it (everything on the stack, useful in embedded and firmware contexts).
+Works with `std` (default, ergonomic one-liners) and without it (everything on the stack, useful in embedded and firmware contexts).
 
 ---
 
@@ -34,7 +34,7 @@ struct Entity {
     id: i64,
     #[nanojson(rename = "is_active")]
     active: bool,
-    position: Vec2,   // nested derived struct — works automatically
+    position: Vec2,   // nested derived struct, works automatically
     health: i64,
 }
 
@@ -140,7 +140,7 @@ let (x, y) = nanojson::parse_manual(json.as_bytes(), |p, buf| {
 
 ### `no_std` tier
 
-All memory on the stack. You choose `N` (output buffer size) and `STR_BUF` (string scratch size — only needs to fit the longest single field value after escape-decoding, typically 32–128 bytes).
+All memory on the stack. You choose `N` (output buffer size) and `STR_BUF` (string scratch size, only needs to fit the longest single field value after escape-decoding, typically 32–128 bytes).
 
 #### Serialization
 
@@ -187,7 +187,7 @@ let (x, y) = nanojson::parse_manual_sized(json, &mut [0; 64], |p, buf| {
 
 ```rust
 let n = nanojson::measure(|s| entity.serialize(s));
-// n is the exact byte count — use it to pick N in stringify_sized / parse_sized.
+// n is the exact byte count, use it to pick N in stringify_sized / parse_sized.
 ```
 
 ---
