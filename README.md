@@ -27,12 +27,15 @@ let json:  &str  = nanojson::stringify_sized(&mut buf, &Point { x: 3, y: 4 })?;
 let point: Point = nanojson::parse_sized(&mut [0; 64], json)?; // <- provide scratch buffer
 ```
 
-Provide blanket serialize and deserialize implementations for:
-* `no-std`: primitive types, fixed sized arrays, slices
+Included blanket implementations, per feature:
+* `no-std`: primitive types including `f32`/`f64`, fixed sized arrays, `Option<T>`
 * optional support for:
   * `alloc`: `String`, `Vec<T>`, `Box<T>`, `BTreeMap<String, V>`
   * `std`: `HashMap<String, V>`
+  * `derive` Derive macros `#[derive(Serialize, Deserialize)]`
   * `arrayvec`: `ArrayVec<T, N>` and `ArrayString<N>`
+
+By default, `alloc`, `std` and `derive` features are enabled
 
 ---
 
@@ -76,18 +79,6 @@ enum Event {
     Death { entity_id: i64 },
 }
 ```
-
----
-
-## Feature tiers
-
-| Feature | Enables |
-|---|---|
-| *(none)* | Core no_std/no_alloc tier: `parse_sized`, `stringify_sized`, fixed-size arrays, all primitives including `f32`/`f64` |
-| `alloc` | `String`, `Vec<T>`, `Box<T>`, `BTreeMap<String, V>` |
-| `std` *(default)* | Everything in `alloc` plus `HashMap<String, V>`, `stringify`/`parse` convenience functions |
-| `derive` *(default)* | `#[derive(Serialize, Deserialize)]` macros |
-| `arrayvec` | `ArrayVec<T, N>` and `ArrayString<N>` from the [`arrayvec`](https://docs.rs/arrayvec) crate |
 
 ---
 
