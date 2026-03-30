@@ -77,9 +77,9 @@ fn main() {
 
     let mut buf = [0; 256];
     let json = nanojson::stringify_sized(&mut buf, &entity).unwrap();
-    std::println!("\nEntity JSON (no_std, {} bytes): {}", json.len(), core::str::from_utf8(json).unwrap());
+    std::println!("\nEntity JSON (no_std, {} bytes): {}", json.len(), json);
 
-    let entity3: Entity = nanojson::parse_sized(json, &mut [0; 64]).unwrap();
+    let entity3: Entity = nanojson::parse_sized(&mut [0; 64], json).unwrap();
     std::println!("Decoded (no_std):  {:?}", entity3);
     assert_eq!(entity, entity3);
 
@@ -96,8 +96,8 @@ fn main() {
 
     let mut buf = [0; 16];
     let json = nanojson::stringify_sized(&mut buf, &team).unwrap();
-    std::println!("Team JSON (no_std): {}", core::str::from_utf8(json).unwrap());
-    let team3: Team = nanojson::parse_sized(json, &mut [0; 16]).unwrap();
+    std::println!("Team JSON (no_std): {}", json);
+    let team3: Team = nanojson::parse_sized(&mut [0; 16], json).unwrap();
     assert_eq!(team, team3);
 
     // ----------------------------------------------------------------
@@ -119,8 +119,8 @@ fn main() {
         // no_std
         let mut buf = [0; 128];
         let json = nanojson::stringify_sized(&mut buf, ev).unwrap();
-        std::println!("Event JSON (no_std): {}", core::str::from_utf8(json).unwrap());
-        let ev3: Event = nanojson::parse_sized(json, &mut [0; 32]).unwrap();
+        std::println!("Event JSON (no_std): {}", json);
+        let ev3: Event = nanojson::parse_sized(&mut [0; 32], json).unwrap();
         assert_eq!(*ev, ev3);
     }
 

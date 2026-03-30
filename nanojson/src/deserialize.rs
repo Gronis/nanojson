@@ -752,7 +752,7 @@ impl_deserialize_map!(
 ///
 /// # Example
 /// ```
-/// let (x, y) = nanojson::parse_manual_sized(b"{\"x\":3,\"y\":4}", &mut [0u8; 16], |p, buf| {
+/// let (x, y) = nanojson::parse_manual_sized(&mut [0u8; 16], b"{\"x\":3,\"y\":4}", |p, buf| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
 ///     while let Some(k) = p.object_member(buf)? {
@@ -768,11 +768,11 @@ impl_deserialize_map!(
 /// assert_eq!((x, y), (3, 4));
 /// ```
 pub fn parse_manual_sized<T>(
-    src: &[u8],
     buf: &mut [u8],
+    src: impl AsRef<[u8]>,
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a>, &'b mut [u8]) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {
-    let mut parser = Parser::new(src);
+    let mut parser = Parser::new(src.as_ref());
     f(&mut parser, buf)
 }
 
@@ -780,54 +780,37 @@ pub fn parse_manual_sized<T>(
 ///
 /// # Example
 /// ```
-/// let n: i64 = nanojson::parse_sized(b"42", &mut [0; 0]).unwrap();
+/// let n: i64 = nanojson::parse_sized(&mut [0; 0], b"42").unwrap();
 /// assert_eq!(n, 42);
 /// ```
 #[inline]
-pub fn parse_sized<'s, T>(
-    src: &'s [u8],
+pub fn parse_sized<T: for<'s, 'b> Deserialize<'s, 'b>>(
     buf: &mut [u8],
-) -> Result<T, ParseError>
-where
-    T: for<'b> Deserialize<'s, 'b>,
-{
-    T::deserialize(&mut Parser::new(src), buf)
+    src: impl AsRef<[u8]>
+) -> Result<T, ParseError> {
+    T::deserialize(&mut Parser::new(src.as_ref()), buf)
 }
 
-/// Deserialize a fully-owned type from raw bytes.
+/// Deserialize a fully-owned type from raw bytes or `&str`.
 /// The scratch buffer is auto-allocated at `src.len()` bytes (safe upper bound
 /// for string decoding: a decoded string is never longer than its escaped form).
 ///
 /// # Example
 /// ```
-/// let n: i64 = nanojson::parse_bytes(b"42").unwrap();
+/// let n: i64 = nanojson::parse(b"42").unwrap();
 /// assert_eq!(n, 42);
-/// ```
-#[cfg(feature = "std")]
-#[inline]
-pub fn parse_bytes<T>(src: &[u8]) -> Result<T, ParseError>
-where
-    T: for<'s, 'b> Deserialize<'s, 'b>,
-{
-    let mut scratch = std::vec![0u8; src.len().max(1)];
-    T::deserialize(&mut Parser::new(src), scratch.as_mut_slice())
-}
-
-/// Deserialize a fully-owned type from a `&str`.
-/// The scratch buffer is auto-allocated; no size choice required.
 ///
-/// # Example
-/// ```
 /// let n: i64 = nanojson::parse("42").unwrap();
 /// assert_eq!(n, 42);
 /// ```
 #[cfg(feature = "std")]
 #[inline]
-pub fn parse<T>(src: &str) -> Result<T, ParseError>
-where
-    T: for<'s, 'b> Deserialize<'s, 'b>,
-{
-    parse_bytes(src.as_bytes())
+pub fn parse<T: for<'s, 'b> Deserialize<'s, 'b>,>(
+    src: impl AsRef<[u8]>,
+) -> Result<T, ParseError> {
+    let src = src.as_ref();
+    let mut scratch = std::vec![0u8; src.len().max(1)];
+    T::deserialize(&mut Parser::new(src), scratch.as_mut_slice())
 }
 
 /// Drive the parser manually with an auto-sized heap-allocated scratch buffer.
@@ -857,9 +840,10 @@ where
 #[cfg(feature = "std")]
 #[inline]
 pub fn parse_manual<T>(
-    src: &[u8],
+    src: impl AsRef<[u8]>,
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a>, &'b mut [u8]) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {
+    let src = src.as_ref();
     let mut scratch = std::vec![0u8; src.len().max(1)];
     let mut parser = Parser::new(src);
     f(&mut parser, &mut scratch)

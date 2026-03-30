@@ -499,7 +499,7 @@ fn test_stringify_sized_roundtrip() {
     let p = Point { x: 3, y: -7 };
     let mut buf = [0; 128];
     let json = nanojson::stringify_sized(&mut buf, &p).unwrap();
-    let p2: Point = nanojson::parse_sized(json, &mut [0; 64]).unwrap();
+    let p2: Point = nanojson::parse_sized(&mut [0; 64], json).unwrap();
     assert_eq!(p, p2);
 }
 
@@ -512,7 +512,7 @@ fn test_stringify_manual_sized() {
         s.member_key("y")?; s.integer(20)?;
         s.object_end()
     }).unwrap();
-    let p: Point = nanojson::parse_sized(json, &mut [0; 32]).unwrap();
+    let p: Point = nanojson::parse_sized(&mut [0; 32], json).unwrap();
     assert_eq!(p, Point { x: 10, y: 20 });
 }
 
@@ -542,7 +542,7 @@ fn test_stringify_sized_nested() {
     let person = Person { age: 30, active: true, address: Address { street_num: 1, zip: 99 } };
     let mut buf = [0; 256];
     let json = nanojson::stringify_sized(&mut buf, &person).unwrap();
-    let person2: Person = nanojson::parse_sized(json, &mut [0; 64]).unwrap();
+    let person2: Person = nanojson::parse_sized(&mut [0; 64], json).unwrap();
     assert_eq!(person, person2);
 }
 
@@ -564,7 +564,7 @@ fn test_stringify_from_str_roundtrip() {
 fn test_stringify_from_bytes_roundtrip() {
     let s = Sensor { value: 42, active: false };
     let json = nanojson::stringify(&s).unwrap();
-    let s2: Sensor = nanojson::parse_bytes(json.as_bytes()).unwrap();
+    let s2: Sensor = nanojson::parse(json.as_bytes()).unwrap();
     assert_eq!(s, s2);
 }
 
@@ -593,7 +593,7 @@ fn test_parse_manual_closure() {
 #[test]
 fn test_parse_manual_sized_closure() {
     let src = br#"{"x":3,"y":4}"#;
-    let p = nanojson::parse_manual_sized::<Point>(src, &mut [0; 256], |parser, buf| Point::deserialize(parser, buf)).unwrap();
+    let p = nanojson::parse_manual_sized::<Point>(&mut [0; 256], src, |parser, buf| Point::deserialize(parser, buf)).unwrap();
     assert_eq!(p, Point { x: 3, y: 4 });
 }
 

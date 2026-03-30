@@ -125,7 +125,7 @@ fn main() {
     })
     .unwrap();
 
-    std::println!("\nSerialized (no_std, {} bytes): {}", json.len(), core::str::from_utf8(json).unwrap());
+    std::println!("\nSerialized (no_std, {} bytes): {}", json.len(), json);
 
     // ----------------------------------------------------------------
     // 4. no_std tier — parse with a 64-byte stack scratch buffer
@@ -143,7 +143,7 @@ fn main() {
     let mut level = 0i64;
 
     let mut str_buf = [0u8; 64];
-    let mut p = Parser::new(json);
+    let mut p = Parser::new(json.as_bytes());
 
     p.object_begin().unwrap();
     while let Some(key) = p.object_member(&mut str_buf).unwrap() {

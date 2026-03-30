@@ -622,18 +622,20 @@ impl Serialize for () {
 ///     s.member_key("n")?; s.integer(7)?;
 ///     s.object_end()
 /// }).unwrap();
-/// assert_eq!(json, b"{\"n\":7}");
+/// assert_eq!(json, "{\"n\":7}");
 /// ```
 #[inline]
 pub fn stringify_manual_sized<'buf>(
     buf: &'buf mut [u8],
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
-) -> Result<&'buf mut [u8], SerializeError<WriteError>> {
+) -> Result<&'buf str, SerializeError<WriteError>> {
     let mut w = crate::write::SliceWriter::new(buf);
     let mut ser = Serializer::new(&mut w);
     f(&mut ser)?;
     let len = w.pos();
-    Ok(&mut buf[..len])
+    core::str::from_utf8(&buf[..len]).map_err(
+        |e| SerializeError::InvalidUtf8(e.valid_up_to())
+    )
 }
 
 /// Serialize a `T: Serialize` value into a stack-allocated `[u8; N]` buffer.
@@ -642,13 +644,13 @@ pub fn stringify_manual_sized<'buf>(
 /// ```
 /// let mut buf = [0u8; 32];
 /// let json = nanojson::stringify_sized(&mut buf, &42i64).unwrap();
-/// assert_eq!(json, b"42");
+/// assert_eq!(json, "42");
 /// ```
 #[inline]
 pub fn stringify_sized<'buf, T: Serialize>(
     buf: &'buf mut [u8],
     val: &T,
-) -> Result<&'buf mut [u8], SerializeError<WriteError>> {
+) -> Result<&'buf str, SerializeError<WriteError>> {
     stringify_manual_sized(buf, |s| val.serialize(s))
 }
 
@@ -662,19 +664,21 @@ pub fn stringify_sized<'buf, T: Serialize>(
 ///     s.member_key("x")?; s.integer(1)?;
 ///     s.object_end()
 /// }).unwrap();
-/// assert_eq!(json, b"{\n  \"x\": 1\n}");
+/// assert_eq!(json, "{\n  \"x\": 1\n}");
 /// ```
 #[inline]
 pub fn stringify_manual_sized_pretty<'buf>(
     buf: &'buf mut [u8],
     indent: usize,
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
-) -> Result<&'buf mut [u8], SerializeError<WriteError>> {
+) -> Result<&'buf str, SerializeError<WriteError>> {
     let mut w = crate::write::SliceWriter::new(buf);
     let mut ser = Serializer::with_pp(&mut w, indent);
     f(&mut ser)?;
     let len = w.pos();
-    Ok(&mut buf[..len])
+    core::str::from_utf8(&buf[..len]).map_err(
+        |e| SerializeError::InvalidUtf8(e.valid_up_to())
+    )
 }
 
 /// Serialize a `T: Serialize` value into a stack-allocated `[u8; N]` buffer with pretty-printing.
@@ -687,7 +691,7 @@ pub fn stringify_manual_sized_pretty<'buf>(
 /// struct Point { x: i64, y: i64 }
 /// let mut buf = [0u8; 64];
 /// let json = nanojson::stringify_sized_pretty(&mut buf, 2, &Point { x: 1, y: 2 }).unwrap();
-/// assert_eq!(json, b"{\n  \"x\": 1,\n  \"y\": 2\n}");
+/// assert_eq!(json, "{\n  \"x\": 1,\n  \"y\": 2\n}");
 /// # }
 /// ```
 #[inline]
@@ -695,7 +699,7 @@ pub fn stringify_sized_pretty<'buf, T: Serialize>(
     buf: &'buf mut [u8],
     indent: usize,
     val: &T,
-) -> Result<&'buf mut [u8], SerializeError<WriteError>> {
+) -> Result<&'buf str, SerializeError<WriteError>> {
     stringify_manual_sized_pretty(buf, indent, |s| val.serialize(s))
 }
 
@@ -825,5 +829,5 @@ fn escapes_vertical_tab_as_unicode() {
     // \v (0x0B) is not a valid JSON escape; must be emitted as \u000b.
     let mut out = [0u8; 16];
     let json = stringify_manual_sized(&mut out, |s| s.string_bytes(&[0x0B])).unwrap();
-    assert_eq!(&json[..], r#""\u000b""#.as_bytes());
+    assert_eq!(&json[..], r#""\u000b""#);
 }

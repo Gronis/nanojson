@@ -11,16 +11,28 @@
 nanojson is a **zero-dependency**, `no-std` compatible JSON serializer and pull-parser with hand-written derives (no `serde`, no `pro-macro2`). It uses an immediate-mode API, validating your schema while parsing. 
 
 ```rust
+use nanojson::{Serialize, Deserialize};
+
 // Annotate your types once:
-#[derive(nanojson::Serialize, nanojson::Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Point { x: i64, y: i64 }
 
-// Then serialize and parse with a single call:
+// std API
 let json: String = nanojson::stringify(&Point { x: 3, y: 4 })?;
 let point: Point = nanojson::parse(&json)?;
+
+// no-std API
+let mut buf = [0; 256]; // <-- json string stored here
+let json:  &str  = nanojson::stringify_sized(&mut buf, &Point { x: 3, y: 4 })?;
+let point: Point = nanojson::parse_sized(&mut [0; 64], json)?; // <- provide scratch buffer
 ```
 
-Works with `std` (default, ergonomic one-liners) and without it (everything on the stack, useful in embedded and firmware contexts).
+Provide blanket serialize and deserialize implementations for:
+* `no-std`: primitive types, fixed sized arrays, slices
+* optional support for:
+  * `alloc`: `String`, `Vec<T>`, `Box<T>`, `BTreeMap<String, V>`
+  * `std`: `HashMap<String, V>`
+  * `arrayvec`: `ArrayVec<T, N>` and `ArrayString<N>`
 
 ---
 
@@ -65,28 +77,6 @@ enum Event {
 }
 ```
 
-#### `std` tier roundtrip
-
-```rust
-let entity = Entity { id: 42, active: true, position: Vec2 { x: 10, y: -5 }, health: 100 };
-
-let json: String = nanojson::stringify(&entity)?;
-
-let entity2: Entity = nanojson::parse(&json)?;
-assert_eq!(entity, entity2);
-```
-
-#### `no_std` tier roundtrip
-
-```rust
-let mut buf = [0; 256];
-let json = nanojson::stringify_sized(&mut buf, &entity)?;
-
-let mut buf = [0; 64];
-let entity2: Entity = nanojson::parse_sized(&mut buf, json)?;
-assert_eq!(entity, entity2);
-```
-
 ---
 
 ## Feature tiers
@@ -127,7 +117,6 @@ let json: String = nanojson::stringify_manual(|s| {
 ```rust
 // One-liner for a derived type
 let entity: Entity = nanojson::parse(&json)?;
-let entity: Entity = nanojson::parse_bytes(json.as_bytes())?;
 
 // Closure form for manual parsing
 let json = r#"{"x": 3, "y": 4}"#;
@@ -172,11 +161,11 @@ let json = nanojson::stringify_manual_sized(&mut buf, |s| {
 
 ```rust
 // One-liner for a derived type (STR_BUF = 64)
-let entity: Entity = nanojson::parse_sized(&json, &mut [0; 64])?;
+let entity: Entity = nanojson::parse_sized(&mut [0; 64], &json)?;
 
 // Low-level parser for hand-written code
 let json = r#"{"x": 3, "y": 4}"#.as_bytes();
-let (x, y) = nanojson::parse_manual_sized(json, &mut [0; 64], |p, buf| {
+let (x, y) = nanojson::parse_manual_sized(&mut [0; 64], json, |p, buf| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
     while let Some(k) = p.object_member(buf)? {

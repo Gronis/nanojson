@@ -224,14 +224,14 @@ fn main() {
     })
     .unwrap();
 
-    std::println!("Log JSON ({} bytes):\n{}\n", log.len(), core::str::from_utf8(log).unwrap());
+    std::println!("Log JSON ({} bytes):\n{}\n", log.len(), log);
 
     // Parse the log. str_buf = 32 bytes is enough for any single field value.
     let mut records: [Option<Record>; 8] = [const { None }; 8];
     let mut count = 0usize;
 
     let mut str_buf = [0u8; 32];
-    let mut json = Parser::new(log);
+    let mut json = Parser::new(log.as_bytes());
 
     json.array_begin().unwrap();
     while json.array_item().unwrap() {

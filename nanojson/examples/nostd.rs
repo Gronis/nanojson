@@ -16,7 +16,7 @@ struct MyStruct {
 fn main() {
     // Parse a JSON string into a struct
     let json = r#"{"num": 42.3, "name": "hello"}"#;
-    let my_struct = nanojson::parse_sized::<MyStruct>(json.as_bytes(), &mut [0; 256]);
+    let my_struct = nanojson::parse_sized::<MyStruct>(&mut [0; 256], json.as_bytes());
 
     if let Ok(my_struct) = my_struct {
         // Change the fields and turn back into a JSON string again
@@ -29,7 +29,7 @@ fn main() {
         if let Ok(json) = nanojson::stringify_sized(&mut buf, &my_struct2) {
             // Use panic! to print the parsed struct and the JSON string since
             // we are in no_std land
-            panic!("Parsed: {my_struct:?}\nJSON: {}", core::str::from_utf8(json).unwrap());
+            panic!("Parsed: {my_struct:?}\nJSON: {}", json);
         }
     }
 }

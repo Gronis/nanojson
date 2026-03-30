@@ -1417,7 +1417,7 @@ fn test_fixed_array_roundtrip() {
 
 #[test]
 fn test_fixed_array_nested() {
-    let arr: [[i32; 2]; 2] = nanojson::parse_sized(b"[[1,2],[3,4]]", &mut [0; 64]).unwrap();
+    let arr: [[i32; 2]; 2] = nanojson::parse_sized(&mut [0; 64], b"[[1,2],[3,4]]").unwrap();
     assert_eq!(arr, [[1, 2], [3, 4]]);
 }
 
@@ -1521,7 +1521,7 @@ fn test_i128_roundtrip() {
     for v in [0i128, 1, -1, i128::MAX, i128::MIN, 1_000_000_000_000_000_000_000i128] {
         let mut buf = [0; 64];
         let json = nanojson::stringify_sized(&mut buf, &v).unwrap();
-        let back: i128 = nanojson::parse_sized(json, &mut [0; 8]).unwrap();
+        let back: i128 = nanojson::parse_sized(&mut [0; 8], json).unwrap();
         assert_eq!(v, back, "roundtrip failed for {v:?}");
     }
 }
@@ -1531,7 +1531,7 @@ fn test_u128_roundtrip() {
     for v in [0u128, 1, u128::MAX, u64::MAX as u128 + 1] {
         let mut buf = [0; 64];
         let json = nanojson::stringify_sized(&mut buf, &v).unwrap();
-        let back: u128 = nanojson::parse_sized(json, &mut [0; 8]).unwrap();
+        let back: u128 = nanojson::parse_sized(&mut [0; 8], json).unwrap();
         assert_eq!(v, back, "roundtrip failed for {v:?}");
     }
 }

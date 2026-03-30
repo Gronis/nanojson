@@ -58,7 +58,7 @@ fn test_readme_impl() -> Result<(), Error> {
     let json = r#"{"id":42,"is_active":true,"position":{"x":0,"y":0},"health":100}"#;
     // One-liner for a derived type
     let entity: Entity = nanojson::parse(&json)?;
-    let entity: Entity = nanojson::parse_bytes(json.as_bytes())?;
+    let entity: Entity = nanojson::parse(json.as_bytes())?;
 
     // Closure form for manual parsing
     let json = r#"{"x": 3, "y": 4}"#;
@@ -96,11 +96,11 @@ fn test_readme_impl() -> Result<(), Error> {
     // Deserialization
     let json = r#"{"id":42,"is_active":true,"position":{},"health":100}"#.as_bytes();
     // One-liner for a derived type (STR_BUF = 64)
-    let entity: Entity = nanojson::parse_sized(json, &mut [0; 64])?;
+    let entity: Entity = nanojson::parse_sized(&mut [0; 64], json)?;
 
     // Low-level parser for hand-written code
     let json = r#"{"x": 3, "y": 4}"#.as_bytes();
-    let (x, y) = nanojson::parse_manual_sized(json, &mut [0; 64], |p, buf| {
+    let (x, y) = nanojson::parse_manual_sized(&mut [0; 64], json, |p, buf| {
         p.object_begin()?;
         let mut x = 0i64; let mut y = 0i64;
         while let Some(k) = p.object_member(buf)? {
@@ -172,7 +172,7 @@ fn test_readme_impl() -> Result<(), Error> {
     let mut buf = [0; 256];
     let json = nanojson::stringify_sized(&mut buf, &entity)?;
 
-    let entity2: Entity = nanojson::parse_sized(json, &mut [0; 64])?;
+    let entity2: Entity = nanojson::parse_sized(&mut [0; 64], json)?;
     assert_eq!(entity, entity2);
 
     // Pretty-printing
