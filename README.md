@@ -95,7 +95,7 @@ No buffer choices. The output `String` grows as needed; the scratch buffer for p
 let json: String = nanojson::stringify(&entity)?;
 
 // Closure form for hand-written JSON
-let json: String = nanojson::stringify_manual(|s| {
+let json: String = nanojson::stringify_as(|s| {
     s.object_begin()?;
       s.member_key("name")?; s.string("Alice")?;
       s.member_key("age")?;  s.integer(30)?;
@@ -111,7 +111,7 @@ let entity: Entity = nanojson::parse(&json)?;
 
 // Closure form for manual parsing
 let json = r#"{"x": 3, "y": 4}"#;
-let (x, y) = nanojson::parse_manual(json.as_bytes(), |p, buf| {
+let (x, y) = nanojson::parse_as(&json, |p, buf| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
     while let Some(k) = p.object_member(buf)? {
@@ -140,7 +140,7 @@ let mut buf = [0; 256];
 let json = nanojson::stringify_sized(&mut buf, &entity)?;
 
 // Closure form
-let json = nanojson::stringify_manual_sized(&mut buf, |s| {
+let json = nanojson::stringify_sized_as(&mut buf, |s| {
     s.object_begin()?;
       s.member_key("name")?; s.string("Alice")?;
       s.member_key("age")?;  s.integer(30)?;
@@ -156,7 +156,7 @@ let entity: Entity = nanojson::parse_sized(&mut [0; 64], &json)?;
 
 // Low-level parser for hand-written code
 let json = r#"{"x": 3, "y": 4}"#.as_bytes();
-let (x, y) = nanojson::parse_manual_sized(&mut [0; 64], json, |p, buf| {
+let (x, y) = nanojson::parse_sized_as(&mut [0; 64], &json, |p, buf| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
     while let Some(k) = p.object_member(buf)? {
@@ -189,12 +189,12 @@ Pass an indent width to the `_pretty` variants of any serialization function:
 ```rust
 // std tier
 let json = nanojson::stringify_pretty(2, &entity)?;
-let json = nanojson::stringify_manual_pretty(2, |s| { ... })?;
+let json = nanojson::stringify_pretty_as(2, |s| { ... })?;
 
 // no_std tier
 let mut buf = [0; 256];
 let json = nanojson::stringify_sized_pretty(&mut buf, 2, &entity)?;
-let json = nanojson::stringify_manual_sized_pretty(&mut buf, 2, |s| { ... })?;
+let json = nanojson::stringify_sized_pretty_as(&mut buf, 2, |s| { ... })?;
 ```
 
 ```json

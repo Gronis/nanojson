@@ -617,7 +617,7 @@ impl Serialize for () {
 /// # Example
 /// ```
 /// let mut buf = [0u8; 32];
-/// let json = nanojson::stringify_manual_sized(&mut buf, |s| {
+/// let json = nanojson::stringify_sized_as(&mut buf, |s| {
 ///     s.object_begin()?;
 ///     s.member_key("n")?; s.integer(7)?;
 ///     s.object_end()
@@ -625,7 +625,7 @@ impl Serialize for () {
 /// assert_eq!(json, "{\"n\":7}");
 /// ```
 #[inline]
-pub fn stringify_manual_sized<'buf>(
+pub fn stringify_sized_as<'buf>(
     buf: &'buf mut [u8],
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
 ) -> Result<&'buf str, SerializeError<WriteError>> {
@@ -651,7 +651,7 @@ pub fn stringify_sized<'buf, T: Serialize>(
     buf: &'buf mut [u8],
     val: &T,
 ) -> Result<&'buf str, SerializeError<WriteError>> {
-    stringify_manual_sized(buf, |s| val.serialize(s))
+    stringify_sized_as(buf, |s| val.serialize(s))
 }
 
 /// Serialize via closure into a stack-allocated `[u8; N]` buffer with pretty-printing.
@@ -659,7 +659,7 @@ pub fn stringify_sized<'buf, T: Serialize>(
 /// # Example
 /// ```
 /// let mut buf = [0u8; 64];
-/// let json = nanojson::stringify_manual_sized_pretty(&mut buf, 2, |s| {
+/// let json = nanojson::stringify_sized_pretty_as(&mut buf, 2, |s| {
 ///     s.object_begin()?;
 ///     s.member_key("x")?; s.integer(1)?;
 ///     s.object_end()
@@ -667,7 +667,7 @@ pub fn stringify_sized<'buf, T: Serialize>(
 /// assert_eq!(json, "{\n  \"x\": 1\n}");
 /// ```
 #[inline]
-pub fn stringify_manual_sized_pretty<'buf>(
+pub fn stringify_sized_pretty_as<'buf>(
     buf: &'buf mut [u8],
     indent: usize,
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
@@ -700,7 +700,7 @@ pub fn stringify_sized_pretty<'buf, T: Serialize>(
     indent: usize,
     val: &T,
 ) -> Result<&'buf str, SerializeError<WriteError>> {
-    stringify_manual_sized_pretty(buf, indent, |s| val.serialize(s))
+    stringify_sized_pretty_as(buf, indent, |s| val.serialize(s))
 }
 
 /// Count the bytes that a closure would produce without writing anything.
@@ -738,7 +738,7 @@ pub fn measure(
 pub fn stringify<T: Serialize>(
     val: &T,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
-    stringify_manual(|s| val.serialize(s))
+    stringify_as(|s| val.serialize(s))
 }
 
 /// Serialize via closure into a heap-allocated [`String`].
@@ -747,7 +747,7 @@ pub fn stringify<T: Serialize>(
 ///
 /// # Example
 /// ```
-/// let json = nanojson::stringify_manual(|s| {
+/// let json = nanojson::stringify_as(|s| {
 ///     s.object_begin()?;
 ///     s.member_key("x")?; s.integer(1)?;
 ///     s.object_end()
@@ -756,7 +756,7 @@ pub fn stringify<T: Serialize>(
 /// ```
 #[cfg(feature = "std")]
 #[inline]
-pub fn stringify_manual(
+pub fn stringify_as(
     f: impl FnOnce(&mut Serializer<std::vec::Vec<u8>>) -> Result<(), SerializeError<core::convert::Infallible>>,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
     let mut ser: Serializer<_> = Serializer::new(std::vec::Vec::new());
@@ -781,7 +781,7 @@ pub fn stringify_pretty<T: Serialize>(
     indent: usize,
     val: &T,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
-    stringify_manual_pretty(indent, |s| val.serialize(s))
+    stringify_pretty_as(indent, |s| val.serialize(s))
 }
 
 /// Serialize via closure into a pretty-printed heap-allocated [`String`].
@@ -789,7 +789,7 @@ pub fn stringify_pretty<T: Serialize>(
 ///
 /// # Example
 /// ```
-/// let json = nanojson::stringify_manual_pretty(2, |s| {
+/// let json = nanojson::stringify_pretty_as(2, |s| {
 ///     s.object_begin()?;
 ///     s.member_key("x")?; s.integer(1)?;
 ///     s.object_end()
@@ -798,7 +798,7 @@ pub fn stringify_pretty<T: Serialize>(
 /// ```
 #[cfg(feature = "std")]
 #[inline]
-pub fn stringify_manual_pretty(
+pub fn stringify_pretty_as(
     indent: usize,
     f: impl FnOnce(&mut Serializer<std::vec::Vec<u8>>) -> Result<(), SerializeError<core::convert::Infallible>>,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
@@ -817,7 +817,7 @@ fn outputs_invalid_utf8_for_malformed_sequence() {
     // 0xA1 is a lone continuation byte.  Both non-ASCII bytes must be \uXXXX-escaped.
     let input = [0xE2u8, 0x28, 0xA1];
 
-    let json = stringify_manual(|s| s.string_bytes(&input)).unwrap();
+    let json = stringify_as(|s| s.string_bytes(&input)).unwrap();
     let ans = r#""\u00e2(\u00a1""#;
     assert_eq!(json, ans);
     assert!(std::str::from_utf8(json.as_bytes()).is_ok(),
@@ -828,6 +828,6 @@ fn outputs_invalid_utf8_for_malformed_sequence() {
 fn escapes_vertical_tab_as_unicode() {
     // \v (0x0B) is not a valid JSON escape; must be emitted as \u000b.
     let mut out = [0u8; 16];
-    let json = stringify_manual_sized(&mut out, |s| s.string_bytes(&[0x0B])).unwrap();
+    let json = stringify_sized_as(&mut out, |s| s.string_bytes(&[0x0B])).unwrap();
     assert_eq!(&json[..], r#""\u000b""#);
 }

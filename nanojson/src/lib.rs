@@ -14,13 +14,13 @@ pub use write::{Write, SliceWriter, SizeCounter};
 pub use serialize::{Serializer, Serialize, SerializeError};
 pub use deserialize::{Parser, Deserialize};
 
-pub use serialize::{stringify_sized, stringify_manual_sized, stringify_sized_pretty, stringify_manual_sized_pretty, measure};
-pub use deserialize::{parse_sized, parse_manual_sized};
+pub use serialize::{stringify_sized, stringify_sized_as, stringify_sized_pretty, stringify_sized_pretty_as, measure};
+pub use deserialize::{parse_sized, parse_sized_as};
 
 #[cfg(feature = "std")]
-pub use serialize::{stringify, stringify_manual, stringify_pretty, stringify_manual_pretty};
+pub use serialize::{stringify, stringify_as, stringify_pretty, stringify_pretty_as};
 #[cfg(feature = "std")]
-pub use deserialize::{parse, parse_manual};
+pub use deserialize::{parse, parse_as};
 
 #[cfg(feature = "derive")]
 pub use nanojson_derive::{Deserialize, Serialize};

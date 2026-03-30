@@ -752,7 +752,7 @@ impl_deserialize_map!(
 ///
 /// # Example
 /// ```
-/// let (x, y) = nanojson::parse_manual_sized(&mut [0u8; 16], b"{\"x\":3,\"y\":4}", |p, buf| {
+/// let (x, y) = nanojson::parse_sized_as(&mut [0u8; 16], b"{\"x\":3,\"y\":4}", |p, buf| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
 ///     while let Some(k) = p.object_member(buf)? {
@@ -767,7 +767,7 @@ impl_deserialize_map!(
 /// }).unwrap();
 /// assert_eq!((x, y), (3, 4));
 /// ```
-pub fn parse_manual_sized<T>(
+pub fn parse_sized_as<T>(
     buf: &mut [u8],
     src: impl AsRef<[u8]>,
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a>, &'b mut [u8]) -> Result<T, ParseError>,
@@ -822,7 +822,7 @@ pub fn parse<T: for<'s, 'b> Deserialize<'s, 'b>,>(
 ///
 /// # Example
 /// ```
-/// let (x, y) = nanojson::parse_manual(b"{\"x\":3,\"y\":4}", |p, buf| {
+/// let (x, y) = nanojson::parse_as(b"{\"x\":3,\"y\":4}", |p, buf| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
 ///     while let Some(k) = p.object_member(buf)? {
@@ -839,7 +839,7 @@ pub fn parse<T: for<'s, 'b> Deserialize<'s, 'b>,>(
 /// ```
 #[cfg(feature = "std")]
 #[inline]
-pub fn parse_manual<T>(
+pub fn parse_as<T>(
     src: impl AsRef<[u8]>,
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a>, &'b mut [u8]) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {

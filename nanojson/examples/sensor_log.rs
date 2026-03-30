@@ -12,7 +12,7 @@
 //!
 //! Shows both API tiers:
 //!
-//! **`std` tier**: `nanojson::stringify` / `nanojson::parse_manual` for
+//! **`std` tier**: `nanojson::stringify` / `nanojson::parse_as` for
 //! quick prototyping without buffer management.
 //!
 //! **`no_std` tier**: `nanojson::serialize::<N>` + `Parser::new` for the real
@@ -133,11 +133,11 @@ fn print_records(records: &[Option<Record>], count: usize) {
 
 fn main() {
     // ==================================================================
-    // std tier — stringify / parse_manual
+    // std tier — stringify / parse_as
     // No buffer sizes to choose; heap grows as needed.
     // ==================================================================
 
-    let json = nanojson::stringify_manual(|json| {
+    let json = nanojson::stringify_as(|json| {
         json.array_begin()?;
 
         json.object_begin()?;
@@ -172,7 +172,7 @@ fn main() {
     let mut records: [Option<Record>; 8] = [const { None }; 8];
     let mut count = 0usize;
 
-    nanojson::parse_manual(json.as_bytes(), |json, buf| {
+    nanojson::parse_as(json.as_bytes(), |json, buf| {
         json.array_begin()?;
         while json.array_item()? {
             json.object_begin()?;
@@ -195,7 +195,7 @@ fn main() {
 
     // Build the log into a 512-byte stack buffer.
     let mut buf = [0; 512];
-    let log = nanojson::stringify_manual_sized(&mut buf, |json| {
+    let log = nanojson::stringify_sized_as(&mut buf, |json| {
         json.array_begin()?;
 
         json.object_begin()?;

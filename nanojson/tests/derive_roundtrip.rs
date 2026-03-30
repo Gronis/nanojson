@@ -504,9 +504,9 @@ fn test_stringify_sized_roundtrip() {
 }
 
 #[test]
-fn test_stringify_manual_sized() {
+fn test_stringify_sized_as() {
     let mut buf = [0; 64];
-    let json = nanojson::stringify_manual_sized(&mut buf, |s| {
+    let json = nanojson::stringify_sized_as(&mut buf, |s| {
         s.object_begin()?;
         s.member_key("x")?; s.integer(10)?;
         s.member_key("y")?; s.integer(20)?;
@@ -570,8 +570,8 @@ fn test_stringify_from_bytes_roundtrip() {
 
 #[cfg(feature = "std")]
 #[test]
-fn test_stringify_manual_closure() {
-    let json = nanojson::stringify_manual(|s| {
+fn test_stringify_as_closure() {
+    let json = nanojson::stringify_as(|s| {
         s.object_begin()?;
         s.member_key("x")?; s.integer(7)?;
         s.member_key("y")?; s.integer(-2)?;
@@ -584,16 +584,16 @@ fn test_stringify_manual_closure() {
 
 #[cfg(feature = "std")]
 #[test]
-fn test_parse_manual_closure() {
+fn test_parse_as_closure() {
     let src = br#"{"x":3,"y":4}"#;
-    let p = nanojson::parse_manual::<Point>(src, |parser, buf| Point::deserialize(parser, buf)).unwrap();
+    let p = nanojson::parse_as::<Point>(src, |parser, buf| Point::deserialize(parser, buf)).unwrap();
     assert_eq!(p, Point { x: 3, y: 4 });
 }
 
 #[test]
-fn test_parse_manual_sized_closure() {
+fn test_parse_sized_as_closure() {
     let src = br#"{"x":3,"y":4}"#;
-    let p = nanojson::parse_manual_sized::<Point>(&mut [0; 256], src, |parser, buf| Point::deserialize(parser, buf)).unwrap();
+    let p = nanojson::parse_sized_as::<Point>(&mut [0; 256], src, |parser, buf| Point::deserialize(parser, buf)).unwrap();
     assert_eq!(p, Point { x: 3, y: 4 });
 }
 

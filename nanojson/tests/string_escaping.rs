@@ -447,7 +447,7 @@ fn roundtrip_special_ascii() {
 #[cfg(feature = "std")]
 #[test]
 fn json_in_json_nested_roundtrip() {
-    use nanojson::{parse_manual, stringify_manual};
+    use nanojson::{parse_as, stringify_as};
 
     // Original field values with Unicode, control characters, and JSON-special chars.
     let name    = "café ☕ → 𝄞";
@@ -456,7 +456,7 @@ fn json_in_json_nested_roundtrip() {
     let message = "\"escape test\"\n\t\x00back\\slash/forward";
 
     // ── step 1: build the initial JSON ────────────────────────────────────────
-    let initial = stringify_manual(|s| {
+    let initial = stringify_as(|s| {
         s.object_begin()?;
         s.member_key("name")?;    s.string(name)?;
         s.member_key("count")?;   s.integer(count)?;
@@ -472,7 +472,7 @@ fn json_in_json_nested_roundtrip() {
     // Each iteration embeds the previous JSON text as an escaped string value.
     let mut encoded = initial.clone();
     for level in 1i64..=3 {
-        let next = stringify_manual(|s| {
+        let next = stringify_as(|s| {
             s.object_begin()?;
             s.member_key("level")?;   s.integer(level)?;
             s.member_key("payload")?; s.string(&encoded)?;
@@ -484,7 +484,7 @@ fn json_in_json_nested_roundtrip() {
     // ── step 3: unwrap by parsing "payload" back out three times ─────────────
     let mut decoded = encoded;
     for _ in 0..3 {
-        decoded = parse_manual(decoded.as_bytes(), |p, buf| {
+        decoded = parse_as(decoded.as_bytes(), |p, buf| {
             p.object_begin()?;
             let mut payload = std::string::String::new();
             while let Some(key) = p.object_member(buf)? {
@@ -505,7 +505,7 @@ fn json_in_json_nested_roundtrip() {
     assert_eq!(decoded, initial, "unwrapped JSON does not match initial");
 
     // ── step 4: parse the recovered JSON and verify every original value ──────
-    parse_manual(decoded.as_bytes(), |p, buf| {
+    parse_as(decoded.as_bytes(), |p, buf| {
         p.object_begin()?;
         let mut got_name    = std::string::String::new();
         let mut got_count   = 0i64;

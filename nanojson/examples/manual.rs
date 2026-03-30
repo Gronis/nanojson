@@ -2,7 +2,7 @@
 //!
 //! Shows both tiers of the API:
 //!
-//! **`std` tier** (`default`): `nanojson::stringify` / `nanojson::parse_manual` —
+//! **`std` tier** (`default`): `nanojson::stringify` / `nanojson::parse_as` —
 //! no buffer choices, heap grows as needed.
 //!
 //! **`no_std` tier**: `nanojson::serialize::<N>` / `nanojson::parse::<STR_BUF>` —
@@ -21,7 +21,7 @@ fn main() {
     // 1. std tier — serialize into a String, no size choice needed
     // ----------------------------------------------------------------
 
-    let json = nanojson::stringify_manual(|s| {
+    let json = nanojson::stringify_as(|s| {
         s.object_begin()?;
           s.member_key("name")?;   s.string("Alice")?;
           s.member_key("scores")?;
@@ -52,7 +52,7 @@ fn main() {
     let mut active = false;
     let mut level = 0i64;
 
-    nanojson::parse_manual(json.as_bytes(), |p, buf| {
+    nanojson::parse_as(json.as_bytes(), |p, buf| {
         p.object_begin()?;
         while let Some(key) = p.object_member(buf)? {
             // Copy key before the next parse call overwrites the scratch buffer.
@@ -107,7 +107,7 @@ fn main() {
     // ----------------------------------------------------------------
 
     let mut buf = [0; 512];
-    let json = nanojson::stringify_manual_sized(&mut buf, |s| {
+    let json = nanojson::stringify_sized_as(&mut buf, |s| {
         s.object_begin()?;
           s.member_key("name")?;   s.string("Alice")?;
           s.member_key("scores")?;
