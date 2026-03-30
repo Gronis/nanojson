@@ -270,9 +270,6 @@ nanojson/
 │   │   └── error.rs              Error types
 │   ├── examples/
 │   └── tests/
-│       ├── readme.rs             tests for README.md code
-│       ├── non_derive.rs         tests for manual parsing with derive trait
-│       └── derive_roundtrip.rs   integration tests
 └── nanojson-derive/              proc-macro crate (no syn/quote/proc_macro2)
 ```
 ---
