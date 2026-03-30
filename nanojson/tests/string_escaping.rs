@@ -440,6 +440,102 @@ fn roundtrip_special_ascii() {
     }
 }
 
+/// Nested JSON-in-JSON: stringify a complex object, embed the resulting JSON
+/// string as the value of a "payload" member, stringify that, repeat 3 times,
+/// then undo all layers by parsing "payload" back out, and verify that every
+/// original field — including complex UTF-8 — survives unchanged.
+#[cfg(feature = "std")]
+#[test]
+fn json_in_json_nested_roundtrip() {
+    use nanojson::{parse_manual, stringify_manual};
+
+    // Original field values with Unicode, control characters, and JSON-special chars.
+    let name    = "café ☕ → 𝄞";
+    let count   = 42i64;
+    let tags    = ["utf8", "日本語", "😀"];
+    let message = "\"escape test\"\n\t\x00back\\slash/forward";
+
+    // ── step 1: build the initial JSON ────────────────────────────────────────
+    let initial = stringify_manual(|s| {
+        s.object_begin()?;
+        s.member_key("name")?;    s.string(name)?;
+        s.member_key("count")?;   s.integer(count)?;
+        s.member_key("tags")?;
+        s.array_begin()?;
+        for tag in &tags { s.string(tag)?; }
+        s.array_end()?;
+        s.member_key("message")?; s.string(message)?;
+        s.object_end()
+    }).unwrap();
+
+    // ── step 2: wrap the JSON string as "payload" three times ─────────────────
+    // Each iteration embeds the previous JSON text as an escaped string value.
+    let mut encoded = initial.clone();
+    for level in 1i64..=3 {
+        let next = stringify_manual(|s| {
+            s.object_begin()?;
+            s.member_key("level")?;   s.integer(level)?;
+            s.member_key("payload")?; s.string(&encoded)?;
+            s.object_end()
+        }).unwrap();
+        encoded = next;
+    }
+
+    // ── step 3: unwrap by parsing "payload" back out three times ─────────────
+    let mut decoded = encoded;
+    for _ in 0..3 {
+        decoded = parse_manual(decoded.as_bytes(), |p, buf| {
+            p.object_begin()?;
+            let mut payload = std::string::String::new();
+            while let Some(key) = p.object_member(buf)? {
+                // Copy key out of buf so we can reuse buf for the value parse.
+                let key = std::string::String::from(key);
+                if key == "payload" {
+                    payload = std::string::String::from(p.string(buf)?);
+                } else {
+                    let _ = p.number_str()?; // skip "level"
+                }
+            }
+            p.object_end()?;
+            Ok(payload)
+        }).unwrap();
+    }
+
+    // After three unwraps we must be back to exactly the initial JSON.
+    assert_eq!(decoded, initial, "unwrapped JSON does not match initial");
+
+    // ── step 4: parse the recovered JSON and verify every original value ──────
+    parse_manual(decoded.as_bytes(), |p, buf| {
+        p.object_begin()?;
+        let mut got_name    = std::string::String::new();
+        let mut got_count   = 0i64;
+        let mut got_tags    = std::vec::Vec::<std::string::String>::new();
+        let mut got_message = std::string::String::new();
+        while let Some(key) = p.object_member(buf)? {
+            let key = std::string::String::from(key);
+            match key.as_str() {
+                "name"    => got_name    = std::string::String::from(p.string(buf)?),
+                "count"   => got_count   = p.number_str()?.parse().unwrap(),
+                "tags"    => {
+                    p.array_begin()?;
+                    while p.array_item()? {
+                        got_tags.push(std::string::String::from(p.string(buf)?));
+                    }
+                    p.array_end()?;
+                }
+                "message" => got_message = std::string::String::from(p.string(buf)?),
+                _ => {}
+            }
+        }
+        p.object_end()?;
+        assert_eq!(got_name,    name,            "name field changed");
+        assert_eq!(got_count,   count,           "count field changed");
+        assert_eq!(got_tags,    tags,            "tags field changed");
+        assert_eq!(got_message, message,         "message field changed");
+        Ok(())
+    }).unwrap();
+}
+
 /// A \uXXXX-escaped string produced by another encoder can be parsed back.
 #[test]
 fn roundtrip_parse_unicode_escape_encoded_output() {
