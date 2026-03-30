@@ -205,32 +205,77 @@ impl<'src> Parser<'src> {
                         }
                         let esc = self.src[self.pos];
                         self.pos += 1;
-                        let decoded = match esc {
-                            b'"'  => b'"',
-                            b'\\' => b'\\',
-                            b'/'  => b'/',
-                            b'b'  => b'\x08',
-                            b't'  => b'\t',
-                            b'n'  => b'\n',
-                            b'v'  => b'\x0B',
-                            b'f'  => b'\x0C',
-                            b'r'  => b'\r',
-                            other => {
-                                self.token = Token::Invalid;
+                        if esc == b'u' {
+                            // \uXXXX — parse 4 hex digits then encode as UTF-8.
+                            if self.pos + 4 > self.src.len() {
+                                return Err(ParseError::at(self.pos, ParseErrorKind::UnexpectedEof));
+                            }
+                            let h = parse_hex4(&self.src[self.pos..])
+                                .ok_or_else(|| ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u')))?;
+                            self.pos += 4;
+
+                            let cp: u32 = if (0xD800..=0xDBFF).contains(&h) {
+                                // High surrogate — must be followed by \uDC00..=\uDFFF.
+                                if self.pos + 6 > self.src.len()
+                                    || self.src[self.pos]     != b'\\'
+                                    || self.src[self.pos + 1] != b'u'
+                                {
+                                    return Err(ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u')));
+                                }
+                                self.pos += 2;
+                                let low = parse_hex4(&self.src[self.pos..])
+                                    .ok_or_else(|| ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u')))?;
+                                if !(0xDC00..=0xDFFF).contains(&low) {
+                                    return Err(ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u')));
+                                }
+                                self.pos += 4;
+                                0x10000 + ((h as u32 - 0xD800) << 10) + (low as u32 - 0xDC00)
+                            } else if (0xDC00..=0xDFFF).contains(&h) {
+                                // Lone low surrogate.
+                                return Err(ParseError::at(self.pos - 4, ParseErrorKind::InvalidEscape(b'u')));
+                            } else {
+                                h as u32
+                            };
+
+                            let (bytes, len) = encode_utf8_cp(cp);
+                            for &byte in &bytes[..len] {
+                                if self.str_len >= str_buf.len() {
+                                    return Err(ParseError::at(
+                                        self.token_start,
+                                        ParseErrorKind::StringBufferOverflow,
+                                    ));
+                                }
+                                str_buf[self.str_len] = byte;
+                                self.str_len += 1;
+                            }
+                        } else {
+                            let decoded = match esc {
+                                b'"'  => b'"',
+                                b'\\' => b'\\',
+                                b'/'  => b'/',
+                                b'b'  => b'\x08',
+                                b't'  => b'\t',
+                                b'n'  => b'\n',
+                                b'v'  => b'\x0B',
+                                b'f'  => b'\x0C',
+                                b'r'  => b'\r',
+                                other => {
+                                    self.token = Token::Invalid;
+                                    return Err(ParseError::at(
+                                        self.pos - 1,
+                                        ParseErrorKind::InvalidEscape(other),
+                                    ));
+                                }
+                            };
+                            if self.str_len >= str_buf.len() {
                                 return Err(ParseError::at(
-                                    self.pos - 1,
-                                    ParseErrorKind::InvalidEscape(other),
+                                    self.token_start,
+                                    ParseErrorKind::StringBufferOverflow,
                                 ));
                             }
-                        };
-                        if self.str_len >= str_buf.len() {
-                            return Err(ParseError::at(
-                                self.token_start,
-                                ParseErrorKind::StringBufferOverflow,
-                            ));
+                            str_buf[self.str_len] = decoded;
+                            self.str_len += 1;
                         }
-                        str_buf[self.str_len] = decoded;
-                        self.str_len += 1;
                     }
                     _ => {
                         let b = self.src[self.pos];
@@ -818,4 +863,48 @@ pub fn parse_manual<T>(
     let mut scratch = std::vec![0u8; src.len().max(1)];
     let mut parser = Parser::new(src);
     f(&mut parser, &mut scratch)
+}
+
+// ---- Unicode helpers (used by \uXXXX parsing in get_token) ----
+
+/// Parse exactly 4 hex digits from the start of `bytes`, returning the u16 value.
+/// Returns `None` if fewer than 4 bytes are present or any byte is not a hex digit.
+fn parse_hex4(bytes: &[u8]) -> Option<u16> {
+    if bytes.len() < 4 { return None; }
+    let mut n: u16 = 0;
+    for &b in &bytes[..4] {
+        let d: u16 = match b {
+            b'0'..=b'9' => (b - b'0') as u16,
+            b'a'..=b'f' => (b - b'a' + 10) as u16,
+            b'A'..=b'F' => (b - b'A' + 10) as u16,
+            _ => return None,
+        };
+        n = n * 16 + d;
+    }
+    Some(n)
+}
+
+/// Encode a Unicode codepoint (must be a valid scalar value) as UTF-8.
+/// Returns the bytes and the number of bytes written (1–4).
+fn encode_utf8_cp(cp: u32) -> ([u8; 4], usize) {
+    match cp {
+        0x00..=0x7F => ([cp as u8, 0, 0, 0], 1),
+        0x80..=0x7FF => ([
+            0xC0 | (cp >> 6) as u8,
+            0x80 | (cp & 0x3F) as u8,
+            0, 0,
+        ], 2),
+        0x800..=0xFFFF => ([
+            0xE0 | (cp >> 12) as u8,
+            0x80 | ((cp >> 6) & 0x3F) as u8,
+            0x80 | (cp & 0x3F) as u8,
+            0,
+        ], 3),
+        _ => ([  // 0x10000..=0x10FFFF
+            0xF0 | (cp >> 18) as u8,
+            0x80 | ((cp >> 12) & 0x3F) as u8,
+            0x80 | ((cp >> 6) & 0x3F) as u8,
+            0x80 | (cp & 0x3F) as u8,
+        ], 4),
+    }
 }
