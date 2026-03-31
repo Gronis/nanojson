@@ -151,13 +151,13 @@ fn test_readme_impl() -> Result<(), Error> {
         Spectator,
     }
 
-    // Struct-variant enums use externally-tagged format: {"VariantName": {...}}
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     enum Event {
+        // Struct-variant enums use externally-tagged format: {"VariantName": {...}}
         Spawn { entity_id: i64, x: i64, y: i64 },
-        Death { entity_id: i64 },
+        // Enum variants can be single value tuples (not multiple values)
+        Death(i32),
     }
-
 
     // std tier roundtrip
     let entity = Entity { id: 42, active: true, position: Vec2 { x: 10, y: -5 }, health: 100 };

@@ -941,6 +941,7 @@ fn test_derive_hashmap_empty() {
 enum Payload {
     Num(i64),
     Text(String),
+    Name { name: String },
     Flag(bool),
 }
 
@@ -955,6 +956,7 @@ enum Mixed2 {
 fn test_tuple_variant_serialize() {
     assert_eq!(nanojson::stringify(&Payload::Num(42)).unwrap(), r#"{"Num":42}"#);
     assert_eq!(nanojson::stringify(&Payload::Text("hello".to_owned())).unwrap(), r#"{"Text":"hello"}"#);
+    assert_eq!(nanojson::stringify(&Payload::Name{ name: "hello".to_owned() }).unwrap(), r#"{"Name":{"name":"hello"}}"#);
     assert_eq!(nanojson::stringify(&Payload::Flag(true)).unwrap(), r#"{"Flag":true}"#);
 }
 

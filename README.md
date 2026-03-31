@@ -59,24 +59,24 @@ struct Entity {
     id: i64,
     #[nanojson(rename = "is_active")]
     active: bool,
-    position: Vec2,   // nested derived struct, works automatically
+    position: Vec2, // <- nested derived struct, works automatically
     health: i64,
 }
 
-// Unit enums serialize as JSON strings:
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 enum Team {
-    Red,
+    Red,            // <- unit enums format: "Red" (a simple string)
     Blue,
     #[nanojson(rename = "spectator")]
     Spectator,
 }
 
-// Struct-variant enums use externally-tagged format: {"VariantName": {...}}
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 enum Event {
+    // tuple struct format: "VariantName": { member: value, ...}
     Spawn { entity_id: i64, x: i64, y: i64 },
-    Death { entity_id: i64 },
+    // single tuple tuples format: "VariantName": value
+    Death(i32),
 }
 ```
 
