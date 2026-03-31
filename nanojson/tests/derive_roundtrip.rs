@@ -932,3 +932,74 @@ fn test_derive_hashmap_empty() {
     let back: WithMap = nanojson::parse(&json).unwrap();
     assert_eq!(v, back);
 }
+
+// ============================================================
+// ---- Tuple enum variants ----
+// ============================================================
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum Payload {
+    Num(i64),
+    Text(String),
+    Flag(bool),
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum Mixed2 {
+    Empty,
+    #[nanojson(rename = "num")]
+    WithNum(i64),
+}
+
+#[test]
+fn test_tuple_variant_serialize() {
+    assert_eq!(nanojson::stringify(&Payload::Num(42)).unwrap(), r#"{"Num":42}"#);
+    assert_eq!(nanojson::stringify(&Payload::Text("hello".to_owned())).unwrap(), r#"{"Text":"hello"}"#);
+    assert_eq!(nanojson::stringify(&Payload::Flag(true)).unwrap(), r#"{"Flag":true}"#);
+}
+
+#[test]
+fn test_tuple_variant_roundtrip() {
+    assert_eq!(roundtrip(&Payload::Num(-7)), Payload::Num(-7));
+    assert_eq!(roundtrip(&Payload::Text("world".to_owned())), Payload::Text("world".to_owned()));
+    assert_eq!(roundtrip(&Payload::Flag(false)), Payload::Flag(false));
+}
+
+#[test]
+fn test_tuple_variant_as_plain_string_is_error() {
+    let result: Result<Payload, _> = nanojson::parse(r#""Num""#);
+    assert!(matches!(
+        result,
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnexpectedToken { .. }, .. })
+    ));
+}
+
+#[test]
+fn test_tuple_variant_unknown_variant_error() {
+    let result: Result<Payload, _> = nanojson::parse(r#"{"Unknown":1}"#);
+    assert!(matches!(
+        result,
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnknownField { .. }, .. })
+    ));
+}
+
+#[test]
+fn test_mixed_unit_and_tuple_variant_serialize() {
+    assert_eq!(nanojson::stringify(&Mixed2::Empty).unwrap(), r#""Empty""#);
+    assert_eq!(nanojson::stringify(&Mixed2::WithNum(99)).unwrap(), r#"{"num":99}"#);
+}
+
+#[test]
+fn test_mixed_unit_and_tuple_variant_roundtrip() {
+    assert_eq!(roundtrip(&Mixed2::Empty), Mixed2::Empty);
+    assert_eq!(roundtrip(&Mixed2::WithNum(5)), Mixed2::WithNum(5));
+}
+
+#[test]
+fn test_mixed_unit_and_tuple_variant_string_is_error_for_tuple() {
+    let result: Result<Mixed2, _> = nanojson::parse(r#""num""#);
+    assert!(matches!(
+        result,
+        Err(nanojson::ParseError { kind: nanojson::ParseErrorKind::UnexpectedToken { .. }, .. })
+    ));
+}

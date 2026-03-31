@@ -40,6 +40,9 @@ pub(crate) struct ParsedVariant {
 
 pub(crate) enum VariantFields {
     Unit,
+    /// Single-value tuple variant, e.g. `A(i32)`. Stores the inner type tokens.
+    #[allow(dead_code)]
+    Tuple(Vec<TokenTree>),
     Named(Vec<ParsedField>),
 }
 
@@ -333,10 +336,26 @@ fn parse_variants(group: Group) -> Result<Vec<ParsedVariant>, TokenStream> {
                 VariantFields::Named(f)
             }
             Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis => {
-                return compiler_error!(
-                    name_ident,
-                    "tuple variants are not supported by nanojson-derive (variant `{name_str}`)"
-                );
+                let g = match toks.next() {
+                    Some(TokenTree::Group(g)) => g,
+                    Some(other) => return compiler_error!(other, "internal error: expected `(...)`"),
+                    None        => return compiler_error!("internal error: unexpected end of input"),
+                };
+                let mut inner = Tokens::new(g.stream());
+                let ty = inner.collect_until_comma();
+                if ty.is_empty() {
+                    return compiler_error!(
+                        name_ident,
+                        "tuple variants must have exactly one field (variant `{name_str}`)"
+                    );
+                }
+                if inner.peek().is_some() {
+                    return compiler_error!(
+                        name_ident,
+                        "only single-value tuple variants are supported by nanojson-derive (variant `{name_str}`)"
+                    );
+                }
+                VariantFields::Tuple(ty)
             }
             _ => VariantFields::Unit,
         };

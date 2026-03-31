@@ -107,6 +107,16 @@ fn gen_serialize_enum(variants: &[ParsedVariant]) -> Result<String, TokenStream>
             VariantFields::Unit => {
                 format!("Self::{vname} => {{ __json.string({jname})?; }}")
             }
+            VariantFields::Tuple(_) => {
+                format!(
+                    "Self::{vname}(__val) => {{ \
+                        __json.object_begin()?; \
+                        __json.member({jname})?; \
+                        ::nanojson::Serialize::serialize(__val, __json)?; \
+                        __json.object_end()?; \
+                    }}"
+                )
+            }
             VariantFields::Named(fields) => {
                 // Pattern: Self::Variant { field1, field2, ... }
                 let pat_fields: String = fields.iter()
@@ -311,9 +321,9 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
                 ));
             }
         }
-        // Struct variants named as a plain string are a type mismatch.
+        // Struct and tuple variants named as a plain string are a type mismatch.
         for v in variants {
-            if matches!(v.fields, VariantFields::Named(_)) {
+            if matches!(v.fields, VariantFields::Named(_) | VariantFields::Tuple(_)) {
                 let jname = escape_rust_str(&v.json_name);
                 code.push_str(&format!(
                     "{jname} => return ::core::result::Result::Err(::nanojson::ParseError {{ \
@@ -343,6 +353,12 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
             let inner = match &v.fields {
                 VariantFields::Unit => {
                     format!("{{ __json.null()?; {name}::{vname} }}")
+                }
+                VariantFields::Tuple(_) => {
+                    format!(
+                        "{{ let __val = ::nanojson::Deserialize::deserialize(__json)?; \
+                           {name}::{vname}(__val) }}"
+                    )
                 }
                 VariantFields::Named(fields) => {
                     let body = gen_deserialize_object_fields(
