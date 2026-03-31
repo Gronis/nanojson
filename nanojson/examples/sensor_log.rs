@@ -63,7 +63,7 @@ fn parse_sensor_id(s: &str) -> SensorId {
 
 /// Parse one record object. The opening `{` has already been consumed
 /// via `array_item()` + `object_begin()` in the caller.
-fn parse_record(json: &mut Parser, buf: &mut [u8]) -> Record {
+fn parse_record(json: &mut Parser) -> Record {
     let mut type_arr  = [0u8; 16]; let mut type_len  = 0usize;
     let mut sensor_arr= [0u8; 16]; let mut sensor_len= 0usize;
     let mut value: Option<i64> = None;
@@ -72,12 +72,12 @@ fn parse_record(json: &mut Parser, buf: &mut [u8]) -> Record {
     while let Some(key) = json.object_member().unwrap() {
         match key {
             "type" => {
-                let s = json.string(buf).unwrap();
+                let s = json.string().unwrap();
                 let (a, l) = copy_str::<16>(s);
                 type_arr = a; type_len = l;
             }
             "sensor" => {
-                let s = json.string(buf).unwrap();
+                let s = json.string().unwrap();
                 let (a, l) = copy_str::<16>(s);
                 sensor_arr = a; sensor_len = l;
             }
@@ -170,11 +170,11 @@ fn main() {
     let mut records: [Option<Record>; 8] = [const { None }; 8];
     let mut count = 0usize;
 
-    nanojson::parse_as(json.as_bytes(), |json, buf| {
+    nanojson::parse_as(json.as_bytes(), |json| {
         json.array_begin()?;
         while json.array_item()? {
             json.object_begin()?;
-            records[count] = Some(parse_record(json, buf));
+            records[count] = Some(parse_record(json));
             count += 1;
         }
         json.array_end()?;
@@ -229,12 +229,12 @@ fn main() {
     let mut count = 0usize;
 
     let mut str_buf = [0u8; 32];
-    let mut json = Parser::new(log.as_bytes());
+    let mut json = Parser::new(log.as_bytes(), &mut str_buf);
 
     json.array_begin().unwrap();
     while json.array_item().unwrap() {
         json.object_begin().unwrap();
-        records[count] = Some(parse_record(&mut json, &mut str_buf));
+        records[count] = Some(parse_record(&mut json));
         count += 1;
     }
     json.array_end().unwrap();
@@ -254,3 +254,5 @@ fn main() {
     });
     std::println!("\nA 'reading' record is {n} bytes when serialized.");
 }
+
+#[cfg(test)] #[test] fn test_main() { main() }

@@ -38,3 +38,6 @@ jobs:
 
       - name: Build examples
         run: cargo build --examples
+
+      - name: Test examples
+        run: cargo test --examples

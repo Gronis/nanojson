@@ -58,11 +58,12 @@ impl<const N: usize> Serialize for StringArray<N> {
     }
 }
 
-impl<'src, const N: usize> Deserialize<'src, '_> for StringArray<N> {
-    fn deserialize(json: &mut Parser<'src>, str_buf: &mut [u8]) -> Result<Self, ParseError> {
-        let s = json.string(str_buf)?;
-        if s.len() > N {
-            let offset = json.error_offset() + N - s.len();
+impl<'src, const N: usize> Deserialize<'src> for StringArray<N> {
+    fn deserialize<'buf>(json: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let s = json.string()?;
+        let len = s.len();
+        if len > N {
+            let offset = json.error_offset() + N - len;
             return Err(ParseError { kind: ParseErrorKind::StringBufferOverflow, offset });
         }
         let mut buf = [0; N];

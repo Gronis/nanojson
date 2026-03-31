@@ -204,7 +204,8 @@ fn main() {
     std::println!("\nSource JSON (10 deep, first 40 chars): {:.40}...", &src_10);
 
     // 4a. Generous limit — succeeds.
-    let mut parser = Parser::new(src_10.as_bytes());
+    let mut buf = [0u8; 1024];
+    let mut parser = Parser::new(src_10.as_bytes(), &mut buf);
     match parse_tree(&mut parser, 0, 20) {
         Ok(tree) => std::println!(
             "Parsed (limit=20, actual depth=10): {} leaf/leaves found.",
@@ -214,7 +215,7 @@ fn main() {
     }
 
     // 4b. Tight limit — fails with NestingTooDeep.
-    let mut parser = Parser::new(src_10.as_bytes());
+    let mut parser = Parser::new(src_10.as_bytes(), &mut buf);
     match parse_tree(&mut parser, 0, 5) {
         Ok(_) => std::println!("Unexpectedly parsed."),
         Err(ParseTreeError::NestingTooDeep { limit }) => {
@@ -229,8 +230,10 @@ fn main() {
     // ------------------------------------------------------------------
     let fitting = Tree::nested(30, 5);
     let json = nanojson::stringify(&fitting).unwrap();
-    let mut parser = Parser::new(json.as_bytes());
+    let mut parser = Parser::new(json.as_bytes(), &mut buf);
     let parsed = parse_tree(&mut parser, 0, 32).unwrap();
     assert_eq!(parsed.leaf_count(), 1);
     std::println!("\nRound-trip (30 deep, default limits): OK.");
 }
+
+#[cfg(test)] #[test] fn test_main() { main() }

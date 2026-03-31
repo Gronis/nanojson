@@ -216,3 +216,5 @@ fn main() {
         Err(e) =>  e.print(raw),
     }
 }
+
+#[cfg(test)] #[test] fn test_main() { main() }

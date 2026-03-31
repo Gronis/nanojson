@@ -52,13 +52,13 @@ fn main() {
     let mut active = false;
     let mut level = 0i64;
 
-    nanojson::parse_as(json.as_bytes(), |p, buf| {
+    nanojson::parse_as(json.as_bytes(), |p| {
         p.object_begin()?;
         while let Some(key) = p.object_member()? {
             // key is &'src str — borrows the source, no copy needed.
             match key {
                 "name" => {
-                    let s = p.string(buf)?;
+                    let s = p.string()?;
                     name_len = s.len();
                     name_bytes[..name_len].copy_from_slice(s.as_bytes());
                 }
@@ -136,13 +136,13 @@ fn main() {
     let mut level = 0i64;
 
     let mut str_buf = [0u8; 64];
-    let mut p = Parser::new(json.as_bytes());
+    let mut p = Parser::new(json.as_bytes(), &mut str_buf);
 
     p.object_begin().unwrap();
     while let Some(key) = p.object_member().unwrap() {
         match key {
             "name" => {
-                let s = p.string(&mut str_buf).unwrap();
+                let s = p.string().unwrap();
                 name_len = s.len();
                 name_bytes[..name_len].copy_from_slice(s.as_bytes());
             }
@@ -212,3 +212,5 @@ fn main() {
     std::println!("\n`{{\"name\":\"Alice\",\"level\":3}}` is {n} bytes.");
     // Use the measured size to pick N: serialize::<{n}>(...) or similar.
 }
+
+#[cfg(test)] #[test] fn test_main() { main() }

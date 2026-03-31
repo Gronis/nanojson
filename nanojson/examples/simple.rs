@@ -25,3 +25,5 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)] #[test] fn test_main() { main() }

@@ -146,27 +146,26 @@ pub(crate) fn gen_deserialize(item: &ParsedItem) -> Result<TokenStream, TokenStr
     };
 
     // For any lifetime params in the struct generics (e.g. `'a` in `Foo<'a>`),
-    // add a `'__buf: 'lt` bound so that &'lt str fields can be filled from the
-    // scratch buffer.
+    // add a `'__src: 'lt` bound so that &'lt str fields can be filled from the
+    // source buffer via current_string_src().
     let lifetimes = lifetime_params(&item.generics);
     let where_clause = if lifetimes.is_empty() {
         String::new()
     } else {
         let bounds: String = lifetimes.iter()
-            .map(|lt| format!("'__buf: '{lt}, "))
+            .map(|lt| format!("'__src: '{lt}, "))
             .collect();
         format!("where {bounds}")
     };
 
     let code = format!(
         r#"
-        impl<'__src, '__buf{comma_gp}> ::nanojson::Deserialize<'__src, '__buf>
+        impl<'__src{comma_gp}> ::nanojson::Deserialize<'__src>
             for {name}{gp}
         {where_clause}
         {{
-            fn deserialize(
-                __json: &mut ::nanojson::Parser<'__src>,
-                __str_buf: &'__buf mut [u8],
+            fn deserialize<'__buf>(
+                __json: &mut ::nanojson::Parser<'__src, '__buf>,
                 ) -> ::core::result::Result<Self, ::nanojson::ParseError> {{
                 {body}
             }}
@@ -223,7 +222,7 @@ fn gen_deserialize_object_fields(
         let jname = escape_rust_str(&f.json_name);
         code.push_str(&format!(
             "{jname} => {{ {fname} = ::core::option::Option::Some(\
-                ::nanojson::Deserialize::deserialize(__json, __str_buf)?\
+                ::nanojson::Deserialize::deserialize(__json)?\
             ); }}"
         ));
     }
@@ -278,7 +277,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
     let tn = escape_rust_str(name);
 
     if all_unit {
-        code.push_str("let __tag = __json.string(__str_buf)?;");
+        code.push_str("let __tag = __json.string()?;");
         code.push_str("match __tag {");
         for v in variants {
             let vname = &v.name;
@@ -301,7 +300,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
 
         // ---- string path: only unit variants are valid here ----
         code.push_str("if __json.is_string_ahead() {");
-        code.push_str("let __tag = __json.string(__str_buf)?;");
+        code.push_str("let __tag = __json.string()?;");
         code.push_str("match __tag {");
         for v in variants {
             if matches!(v.fields, VariantFields::Unit) {

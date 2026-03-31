@@ -20,8 +20,9 @@ fn ser(f: impl FnOnce(&mut Serializer<&mut SliceWriter<'_>, 8>) -> Result<(), Se
     core::str::from_utf8(&buf[..n]).expect("output is not utf-8").to_owned()
 }
 
-fn parse<'b>(src: &[u8], buf: &'b mut [u8]) -> Result<&'b str, ParseErrorKind> {
-    Parser::new(src).string(buf).map_err(|e| e.kind)
+fn parse(src: &[u8], buf: &mut [u8]) -> Result<std::string::String, ParseErrorKind> {
+    let mut p = Parser::new(src, buf);
+    p.string().map(|s| s.to_owned()).map_err(|e| e.kind)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -402,11 +403,12 @@ fn parse_err_eof_in_string() {
 /// is escaped then parses back to the same byte value.
 #[test]
 fn roundtrip_control_chars() {
-    let mut buf = [0u8; 32];
     for byte in 0x00u8..=0x1Fu8 {
         let encoded = ser(|s| s.string_bytes(&[byte]));
-        let decoded = Parser::new(encoded.as_bytes())
-            .string(&mut buf)
+        let mut buf = [0u8; 32];
+        let mut p = Parser::new(encoded.as_bytes(), &mut buf);
+        let decoded = p.string()
+            .map(|s| s.to_owned())
             .expect(&std::format!("failed to parse encoded byte 0x{byte:02x}: {encoded:?}"));
         assert_eq!(decoded.as_bytes(), &[byte], "round-trip failed for byte 0x{byte:02x}");
     }
@@ -416,11 +418,12 @@ fn roundtrip_control_chars() {
 #[test]
 fn roundtrip_unicode_strings() {
     let inputs = ["café", "日本語", "😀", "𝄞", "→", "\u{10FFFF}"];
-    let mut buf = [0u8; 64];
     for &s in &inputs {
         let encoded = ser(|ser| ser.string(s));
-        let decoded = Parser::new(encoded.as_bytes())
-            .string(&mut buf)
+        let mut buf = [0u8; 64];
+        let mut p = Parser::new(encoded.as_bytes(), &mut buf);
+        let decoded = p.string()
+            .map(|s| s.to_owned())
             .expect(&std::format!("parse failed for {s:?}: {encoded:?}"));
         assert_eq!(decoded, s, "round-trip failed for {s:?}");
     }
@@ -430,11 +433,12 @@ fn roundtrip_unicode_strings() {
 #[test]
 fn roundtrip_special_ascii() {
     let inputs = ["\"", "\\", "/", "\"hello\\world\"", "a\nb\tc\rd"];
-    let mut buf = [0u8; 64];
     for &s in &inputs {
         let encoded = ser(|ser| ser.string(s));
-        let decoded = Parser::new(encoded.as_bytes())
-            .string(&mut buf)
+        let mut buf = [0u8; 64];
+        let mut p = Parser::new(encoded.as_bytes(), &mut buf);
+        let decoded = p.string()
+            .map(|s| s.to_owned())
             .expect(&std::format!("parse failed for {s:?}: {encoded:?}"));
         assert_eq!(decoded, s, "round-trip failed for {s:?}");
     }
@@ -484,14 +488,14 @@ fn json_in_json_nested_roundtrip() {
     // ── step 3: unwrap by parsing "payload" back out three times ─────────────
     let mut decoded = encoded;
     for _ in 0..3 {
-        decoded = parse_as(decoded.as_bytes(), |p, buf| {
+        decoded = parse_as(decoded.as_bytes(), |p| {
             p.object_begin()?;
             let mut payload = std::string::String::new();
             while let Some(key) = p.object_member()? {
                 // Copy key out of buf so we can reuse buf for the value parse.
                 let key = std::string::String::from(key);
                 if key == "payload" {
-                    payload = std::string::String::from(p.string(buf)?);
+                    payload = std::string::String::from(p.string()?);
                 } else {
                     let _ = p.number_str()?; // skip "level"
                 }
@@ -505,7 +509,7 @@ fn json_in_json_nested_roundtrip() {
     assert_eq!(decoded, initial, "unwrapped JSON does not match initial");
 
     // ── step 4: parse the recovered JSON and verify every original value ──────
-    parse_as(decoded.as_bytes(), |p, buf| {
+    parse_as(decoded.as_bytes(), |p| {
         p.object_begin()?;
         let mut got_name    = std::string::String::new();
         let mut got_count   = 0i64;
@@ -514,16 +518,16 @@ fn json_in_json_nested_roundtrip() {
         while let Some(key) = p.object_member()? {
             let key = std::string::String::from(key);
             match key.as_str() {
-                "name"    => got_name    = std::string::String::from(p.string(buf)?),
+                "name"    => got_name    = std::string::String::from(p.string()?),
                 "count"   => got_count   = p.integer()?,
                 "tags"    => {
                     p.array_begin()?;
                     while p.array_item()? {
-                        got_tags.push(std::string::String::from(p.string(buf)?));
+                        got_tags.push(std::string::String::from(p.string()?));
                     }
                     p.array_end()?;
                 }
-                "message" => got_message = std::string::String::from(p.string(buf)?),
+                "message" => got_message = std::string::String::from(p.string()?),
                 _ => {}
             }
         }

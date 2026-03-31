@@ -443,61 +443,58 @@ fn test_serialize_trait_array() {
 
 #[test]
 fn test_parse_null() {
-    Parser::new(b"null").null().unwrap();
+    Parser::new(b"null", &mut []).null().unwrap();
 }
 
 #[test]
 fn test_parse_bool() {
-    assert!( Parser::new(b"true", ).boolean().unwrap());
-    assert!(!Parser::new(b"false",).boolean().unwrap());
+    assert!( Parser::new(b"true",  &mut []).boolean().unwrap());
+    assert!(!Parser::new(b"false", &mut []).boolean().unwrap());
 }
 
 #[test]
 fn test_parse_number_str_variants() {
-    assert_eq!(Parser::new(b"0",     ).number_str().unwrap(), "0");
-    assert_eq!(Parser::new(b"3.14",  ).number_str().unwrap(), "3.14");
-    assert_eq!(Parser::new(b"-42",   ).number_str().unwrap(), "-42");
-    assert_eq!(Parser::new(b"1e10",  ).number_str().unwrap(), "1e10");
-    assert_eq!(Parser::new(b"1.5e-3",).number_str().unwrap(), "1.5e-3");
-    assert_eq!(Parser::new(b"-0.0",  ).number_str().unwrap(), "-0.0");
-    assert_eq!(Parser::new(b"1E+2",  ).number_str().unwrap(), "1E+2");
+    assert_eq!(Parser::new(b"0",     &mut []).number_str().unwrap(), "0");
+    assert_eq!(Parser::new(b"3.14",  &mut []).number_str().unwrap(), "3.14");
+    assert_eq!(Parser::new(b"-42",   &mut []).number_str().unwrap(), "-42");
+    assert_eq!(Parser::new(b"1e10",  &mut []).number_str().unwrap(), "1e10");
+    assert_eq!(Parser::new(b"1.5e-3",&mut []).number_str().unwrap(), "1.5e-3");
+    assert_eq!(Parser::new(b"-0.0",  &mut []).number_str().unwrap(), "-0.0");
+    assert_eq!(Parser::new(b"1E+2",  &mut []).number_str().unwrap(), "1E+2");
 }
 
 #[test]
 fn test_parse_string_escapes() {
-    let mut buf = [0u8; 64];
     // All supported escape sequences
-    assert_eq!(Parser::new(b"\"\\b\"",).string(&mut buf).unwrap(), "\x08");
-    assert_eq!(Parser::new(b"\"\\t\"",).string(&mut buf).unwrap(), "\t");
-    assert_eq!(Parser::new(b"\"\\n\"",).string(&mut buf).unwrap(), "\n");
-    assert_eq!(Parser::new(b"\"\\r\"",).string(&mut buf).unwrap(), "\r");
-    assert_eq!(Parser::new(b"\"\\f\"",).string(&mut buf).unwrap(), "\x0C");
-    assert_eq!(Parser::new(b"\"\\v\"",).string(&mut buf).unwrap(), "\x0B");
-    assert_eq!(Parser::new(b"\"\\\\\"").string(&mut buf).unwrap(), "\\");
-    assert_eq!(Parser::new(b"\"\\\"\"").string(&mut buf).unwrap(), "\"");
-    assert_eq!(Parser::new(b"\"\\/\"",).string(&mut buf).unwrap(), "/");
+    assert_eq!(Parser::new(b"\"\\b\"", &mut [0u8; 8]).string().unwrap(), "\x08");
+    assert_eq!(Parser::new(b"\"\\t\"", &mut [0u8; 8]).string().unwrap(), "\t");
+    assert_eq!(Parser::new(b"\"\\n\"", &mut [0u8; 8]).string().unwrap(), "\n");
+    assert_eq!(Parser::new(b"\"\\r\"", &mut [0u8; 8]).string().unwrap(), "\r");
+    assert_eq!(Parser::new(b"\"\\f\"", &mut [0u8; 8]).string().unwrap(), "\x0C");
+    assert_eq!(Parser::new(b"\"\\v\"", &mut [0u8; 8]).string().unwrap(), "\x0B");
+    assert_eq!(Parser::new(b"\"\\\\\"", &mut [0u8; 8]).string().unwrap(), "\\");
+    assert_eq!(Parser::new(b"\"\\\"\"", &mut [0u8; 8]).string().unwrap(), "\"");
+    assert_eq!(Parser::new(b"\"\\/\"", &mut [0u8; 8]).string().unwrap(), "/");
 }
 
 #[test]
 fn test_parse_string_multiple_escapes() {
-    let mut buf = [0u8; 64];
     // "a\nb\tc"
     assert_eq!(
-        Parser::new(b"\"a\\nb\\tc\"").string(&mut buf).unwrap(),
+        Parser::new(b"\"a\\nb\\tc\"", &mut [0u8; 16]).string().unwrap(),
         "a\nb\tc"
     );
     // "\"quoted\""
     assert_eq!(
-        Parser::new(b"\"\\\"quoted\\\"\"").string(&mut buf).unwrap(),
+        Parser::new(b"\"\\\"quoted\\\"\"", &mut [0u8; 16]).string().unwrap(),
         "\"quoted\""
     );
 }
 
 #[test]
 fn test_parse_string_utf8() {
-    let mut buf = [0u8; 64];
-    assert_eq!(Parser::new("\"café\"".as_bytes()).string(&mut buf).unwrap(), "café");
-    assert_eq!(Parser::new("\"日本\"".as_bytes()).string(&mut buf).unwrap(), "日本");
+    assert_eq!(Parser::new("\"café\"".as_bytes(), &mut [0u8; 16]).string().unwrap(), "café");
+    assert_eq!(Parser::new("\"日本\"".as_bytes(), &mut [0u8; 16]).string().unwrap(), "日本");
 }
 
 #[test]
@@ -505,7 +502,7 @@ fn test_parse_whitespace_everywhere() {
     // JSON with generous whitespace
     let src = b"  {  \"x\"  :  42  ,  \"y\"  :  true  }  ";
     let mut buf = [0u8; 64];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     let mut x = 0i64;
     let mut y = false;
     j.object_begin().unwrap();
@@ -524,7 +521,7 @@ fn test_parse_whitespace_everywhere() {
 #[test]
 fn test_parse_whitespace_in_array() {
     let src = b"[ 1 , 2 , 3 ]";
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut []);
     let mut v = [0i64; 3];
     j.array_begin().unwrap();
     let mut i = 0;
@@ -540,7 +537,7 @@ fn test_parse_whitespace_in_array() {
 fn test_parse_array_of_objects() {
     let src = br#"[{"a":1,"b":2},{"a":3,"b":4}]"#;
     let mut buf = [0u8; 64];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     let mut results = [(0i64, 0i64); 2];
     j.array_begin().unwrap();
     let mut idx = 0;
@@ -566,7 +563,7 @@ fn test_parse_array_of_objects() {
 #[test]
 fn test_parse_array_of_arrays() {
     let src = b"[[1,2],[3,4],[5,6]]";
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut []);
     let mut grid = [[0i64; 2]; 3];
     j.array_begin().unwrap();
     let mut row = 0;
@@ -589,7 +586,7 @@ fn test_parse_deeply_nested() {
     // {"a":{"b":{"c":{"d":42}}}}
     let src = br#"{"a":{"b":{"c":{"d":42}}}}"#;
     let mut buf = [0u8; 16];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
     assert_eq!(j.object_member().unwrap(), Some("a"));
     j.object_begin().unwrap();
@@ -613,7 +610,7 @@ fn test_parse_deeply_nested() {
 fn test_parse_null_values_in_object() {
     let src = br#"{"a":null,"b":1}"#;
     let mut buf = [0u8; 16];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
     while let Some(key) = j.object_member().unwrap() {
         match key {
@@ -629,7 +626,7 @@ fn test_parse_null_values_in_object() {
 fn test_parse_empty_object() {
     let src = b"{}";
     let mut buf = [0u8; 8];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
     assert_eq!(j.object_member().unwrap(), None);
     j.object_end().unwrap();
@@ -638,7 +635,7 @@ fn test_parse_empty_object() {
 #[test]
 fn test_parse_empty_array() {
     let src = b"[]";
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut []);
     j.array_begin().unwrap();
     assert!(!j.array_item().unwrap());
     j.array_end().unwrap();
@@ -648,7 +645,7 @@ fn test_parse_empty_array() {
 fn test_parse_object_single_field() {
     let src = br#"{"k":99}"#;
     let mut buf = [0u8; 16];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
     assert_eq!(j.object_member().unwrap(), Some("k"));
     assert_eq!(j.integer::<i64>().unwrap(), 99);
@@ -671,11 +668,10 @@ struct Node {
 /// Parse a node or null from the current position.
 /// Returns the arena index of the newly parsed node, or -1 for null.
 /// `arena` is a pre-allocated slice, `count` is how many nodes are used.
-fn parse_node<'src>(
-    j: &mut Parser<'src>,
+fn parse_node(
+    j: &mut Parser<'_, '_>,
     arena: &mut [Node; 16],
     count: &mut usize,
-    buf: &mut [u8],
 ) -> i32 {
     if j.is_null_ahead() {
         j.null().unwrap();
@@ -690,8 +686,8 @@ fn parse_node<'src>(
     while let Some(key) = j.object_member().unwrap() {
         match key {
             "v" => value = j.integer().unwrap(),
-            "l" => left  = parse_node(j, arena, count, buf),
-            "r" => right = parse_node(j, arena, count, buf),
+            "l" => left  = parse_node(j, arena, count),
+            "r" => right = parse_node(j, arena, count),
             _   => panic!("unexpected tree field: {key}"),
         }
     }
@@ -708,11 +704,10 @@ fn test_parse_recursive_tree() {
     //       / \
     //      4   5
     let src = br#"{"v":1,"l":{"v":2,"l":{"v":4,"l":null,"r":null},"r":{"v":5,"l":null,"r":null}},"r":{"v":3,"l":null,"r":null}}"#;
-    let mut buf = [0u8; 32];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut []);
     let mut arena = core::array::from_fn(|_| Node { value: 0, left: -1, right: -1 });
     let mut count = 0usize;
-    let root = parse_node(&mut j, &mut arena, &mut count, &mut buf);
+    let root = parse_node(&mut j, &mut arena, &mut count);
 
     assert_eq!(count, 5);
     assert_eq!(root, 0);
@@ -730,10 +725,9 @@ fn test_parse_recursive_list() {
     // A JSON array of objects, each with a "next" that is either null or an object
     // Represented as: [1, [2, [3, null]]]  via {"head":1,"tail":...}
     let src = br#"{"head":1,"tail":{"head":2,"tail":{"head":3,"tail":null}}}"#;
-    let mut buf = [0u8; 32];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut []);
 
-    fn parse_list<'src, 'buf>(j: &mut Parser<'src>, out: &mut [i64; 8], n: &mut usize, buf: &mut [u8]) {
+    fn parse_list(j: &mut Parser<'_, '_>, out: &mut [i64; 8], n: &mut usize) {
         if j.is_null_ahead() { j.null().unwrap(); return; }
         j.object_begin().unwrap();
         while let Some(key) = j.object_member().unwrap() {
@@ -742,7 +736,7 @@ fn test_parse_recursive_list() {
                     out[*n] = j.integer().unwrap();
                     *n += 1;
                 }
-                "tail" => parse_list(j, out, n, buf),
+                "tail" => parse_list(j, out, n),
                 _ => panic!("unexpected key"),
             }
         }
@@ -751,7 +745,7 @@ fn test_parse_recursive_list() {
 
     let mut values = [0i64; 8];
     let mut n = 0usize;
-    parse_list(&mut j, &mut values, &mut n, &mut buf);
+    parse_list(&mut j, &mut values, &mut n);
     assert_eq!(n, 3);
     assert_eq!(&values[..n], &[1, 2, 3]);
 }
@@ -762,7 +756,7 @@ fn test_parse_recursive_list() {
 
 #[test]
 fn test_lookahead_does_not_advance() {
-    let mut j = Parser::new(b"42");
+    let mut j = Parser::new(b"42", &mut []);
     // Peeking should not consume
     assert!(j.is_number_ahead());
     assert!(j.is_number_ahead()); // still works
@@ -771,18 +765,18 @@ fn test_lookahead_does_not_advance() {
 
 #[test]
 fn test_lookahead_all_types() {
-    assert!( Parser::new(b"null",   ).is_null_ahead());
-    assert!( Parser::new(b"true",   ).is_bool_ahead());
-    assert!( Parser::new(b"false",  ).is_bool_ahead());
-    assert!( Parser::new(b"42",     ).is_number_ahead());
-    assert!( Parser::new(b"\"hi\"", ).is_string_ahead());
-    assert!( Parser::new(b"[1]",    ).is_array_ahead());
-    assert!( Parser::new(b"{\"a\":1}").is_object_ahead());
+    assert!( Parser::new(b"null",  &mut []).is_null_ahead());
+    assert!( Parser::new(b"true",  &mut []).is_bool_ahead());
+    assert!( Parser::new(b"false", &mut []).is_bool_ahead());
+    assert!( Parser::new(b"42",    &mut []).is_number_ahead());
+    assert!( Parser::new(b"\"hi\"",&mut []).is_string_ahead());
+    assert!( Parser::new(b"[1]",   &mut []).is_array_ahead());
+    assert!( Parser::new(b"{\"a\":1}", &mut []).is_object_ahead());
     // Negative checks
-    assert!(!Parser::new(b"null",).is_bool_ahead());
-    assert!(!Parser::new(b"42",  ).is_string_ahead());
-    assert!(!Parser::new(b"true",).is_null_ahead());
-    assert!(!Parser::new(b"\"s\"").is_number_ahead());
+    assert!(!Parser::new(b"null",  &mut []).is_bool_ahead());
+    assert!(!Parser::new(b"42",    &mut []).is_string_ahead());
+    assert!(!Parser::new(b"true",  &mut []).is_null_ahead());
+    assert!(!Parser::new(b"\"s\"", &mut []).is_number_ahead());
 }
 
 #[test]
@@ -792,7 +786,7 @@ fn test_lookahead_to_branch_on_type() {
     let src_null = b"null";
 
     {
-        let mut j = Parser::new(src_num);
+        let mut j = Parser::new(src_num, &mut []);
         let val: Option<i64> = if j.is_null_ahead() {
             j.null().unwrap(); None
         } else {
@@ -801,7 +795,7 @@ fn test_lookahead_to_branch_on_type() {
         assert_eq!(val, Some(42));
     }
     {
-        let mut j = Parser::new(src_null);
+        let mut j = Parser::new(src_null, &mut []);
         let val: Option<i64> = if j.is_null_ahead() {
             j.null().unwrap(); None
         } else {
@@ -822,7 +816,7 @@ fn test_lookahead_to_branch_on_type() {
 fn test_error_unexpected_eof_in_object() {
     let src = b"{\"x\":";  // truncated after colon
     let mut buf = [0u8; 16];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
     j.object_member().unwrap(); // key "x"
     // Trying to read a value hits EOF
@@ -837,7 +831,7 @@ fn test_error_unexpected_eof_in_object() {
 #[test]
 fn test_error_unexpected_eof_empty() {
     let src = b"";
-    let err = Parser::new(src).null().unwrap_err();
+    let err = Parser::new(src, &mut []).null().unwrap_err();
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedEof)
         || matches!(err.kind, ParseErrorKind::UnexpectedToken { .. })
@@ -848,7 +842,7 @@ fn test_error_unexpected_eof_empty() {
 fn test_error_unexpected_eof_in_string() {
     let src = b"\"unterminated";
     let mut buf = [0u8; 32];
-    let err = Parser::new(src).string(&mut buf).unwrap_err();
+    let err = Parser::new(src, &mut buf).string().unwrap_err();
     assert!(matches!(err.kind, ParseErrorKind::UnexpectedEof));
 }
 
@@ -856,7 +850,7 @@ fn test_error_unexpected_eof_in_string() {
 fn test_error_invalid_escape() {
     let src = b"\"\\q\"";  // \q is not a valid escape
     let mut buf = [0u8; 16];
-    let err = Parser::new(src).string(&mut buf).unwrap_err();
+    let err = Parser::new(src, &mut buf).string().unwrap_err();
     assert!(
         matches!(err.kind, ParseErrorKind::InvalidEscape(b'q')),
         "expected InvalidEscape('q'), got {:?}", err.kind
@@ -871,7 +865,7 @@ fn test_error_invalid_escape_offset() {
     // token_start was 0 (start of string), but error.offset is at the escape char
     let src = b"\"a\\qb\"";
     let mut buf = [0u8; 16];
-    let err = Parser::new(src).string(&mut buf).unwrap_err();
+    let err = Parser::new(src, &mut buf).string().unwrap_err();
     assert!(matches!(err.kind, ParseErrorKind::InvalidEscape(b'q')));
     // offset 3 = the 'q' byte
     assert_eq!(err.offset, 3, "expected offset 3 for 'q', got {}", err.offset);
@@ -885,7 +879,7 @@ fn test_error_wrong_type_number_expected() {
     //             {  "  x  "  :  "  o  o  p  s  "  }
     let src = b"{\"x\":\"oops\"}";
     let mut buf = [0u8; 16];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
     j.object_member().unwrap(); // key "x"
     let err = j.number_str().unwrap_err();
@@ -900,7 +894,7 @@ fn test_error_wrong_type_number_expected() {
 #[test]
 fn test_error_wrong_type_bool_expected() {
     let src = b"42";
-    let err = Parser::new(src).boolean().unwrap_err();
+    let err = Parser::new(src, &mut []).boolean().unwrap_err();
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedToken { expected: "boolean", .. }),
         "got {:?}", err.kind
@@ -911,7 +905,7 @@ fn test_error_wrong_type_bool_expected() {
 #[test]
 fn test_error_wrong_type_object_expected() {
     let src = b"[1,2]";
-    let err = Parser::new(src).object_begin().unwrap_err();
+    let err = Parser::new(src, &mut []).object_begin().unwrap_err();
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedToken { expected: "{", .. }),
         "got {:?}", err.kind
@@ -922,7 +916,7 @@ fn test_error_wrong_type_object_expected() {
 #[test]
 fn test_error_wrong_type_array_expected() {
     let src = b"{\"a\":1}";
-    let err = Parser::new(src).array_begin().unwrap_err();
+    let err = Parser::new(src, &mut []).array_begin().unwrap_err();
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedToken { expected: "[", .. }),
         "got {:?}", err.kind
@@ -935,7 +929,7 @@ fn test_error_unexpected_token_in_object() {
     // Missing colon: {"x" 42}
     let src = b"{\"x\" 42}";
     let mut buf = [0u8; 16];
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
     let err = j.object_member().unwrap_err();
     assert!(
@@ -947,7 +941,7 @@ fn test_error_unexpected_token_in_object() {
 #[test]
 fn test_error_invalid_token() {
     let src = b"xyz";  // not a valid JSON token
-    let err = Parser::new(src).boolean().unwrap_err();
+    let err = Parser::new(src, &mut []).boolean().unwrap_err();
     // This should produce UnexpectedToken or a similar error
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedToken { .. }),
@@ -959,8 +953,8 @@ fn test_error_invalid_token() {
 fn test_error_string_buffer_overflow() {
     let src = b"\"a very long string that wont fit\"";
     let mut buf = [0u8; 4]; // too small
-    let mut j = Parser::new(src);
-    let err = j.string(&mut buf).unwrap_err();
+    let mut j = Parser::new(src, &mut buf);
+    let err = j.string().unwrap_err();
     assert!(matches!(err.kind, ParseErrorKind::StringBufferOverflow));
     assert_eq!(err.offset, 0); // string started at offset 0
 }
@@ -971,7 +965,7 @@ fn test_error_offset_in_array() {
     //  0  1  2  3
     //  [  1  ,  " ...
     let src = b"[1,\"oops\"]";
-    let mut j = Parser::new(src);
+    let mut j = Parser::new(src, &mut []);
     j.array_begin().unwrap();
     j.array_item().unwrap();
     j.number_str().unwrap(); // "1" ok
@@ -984,7 +978,7 @@ fn test_error_offset_in_array() {
 #[test]
 fn test_unknown_field() {
     let mut buf = [0u8; 64];
-    let mut j = Parser::new(b"{\"z\":99}");
+    let mut j = Parser::new(b"{\"z\":99}", &mut buf);
     j.object_begin().unwrap();
     assert_eq!(j.object_member().unwrap(), Some("z"));
     let err = j.unknown_field();
@@ -1011,7 +1005,7 @@ fn test_roundtrip_object() {
     }
 
     let mut str_buf = [0u8; 64];
-    let mut json = Parser::new(&out_buf[..w_len]);
+    let mut json = Parser::new(&out_buf[..w_len], &mut str_buf);
     json.object_begin().unwrap();
     let mut name_buf = [0u8; 16]; let mut name_len = 0;
     let mut age = 0i64;
@@ -1019,7 +1013,7 @@ fn test_roundtrip_object() {
     while let Some(key) = json.object_member().unwrap() {
         match key {
             "name" => {
-                let s = json.string(&mut str_buf).unwrap();
+                let s = json.string().unwrap();
                 name_len = s.len();
                 name_buf[..name_len].copy_from_slice(s.as_bytes());
             }
@@ -1047,7 +1041,7 @@ fn test_roundtrip_array_of_numbers() {
         json.array_end().unwrap();
         w_len = w.pos();
     }
-    let mut j = Parser::new(&out[..w_len]);
+    let mut j = Parser::new(&out[..w_len], &mut []);
     let mut parsed = [0i64; 8];
     j.array_begin().unwrap();
     let mut i = 0;
@@ -1081,7 +1075,7 @@ fn test_roundtrip_nested_structure() {
     }
 
     let mut buf = [0u8; 32];
-    let mut j = Parser::new(&out[..w_len]);
+    let mut j = Parser::new(&out[..w_len], &mut buf);
     j.object_begin().unwrap();
     let mut matrix = [[0i64; 2]; 2];
     let mut label_buf = [0u8; 8]; let mut label_len = 0;
@@ -1103,7 +1097,7 @@ fn test_roundtrip_nested_structure() {
                 j.array_end().unwrap();
             }
             "label" => {
-                let s = j.string(&mut buf).unwrap();
+                let s = j.string().unwrap();
                 label_len = s.len();
                 label_buf[..label_len].copy_from_slice(s.as_bytes());
             }
@@ -1121,38 +1115,34 @@ fn test_roundtrip_nested_structure() {
 
 #[test]
 fn test_deserialize_bool() {
-    let mut buf = [0u8; 16];
-    assert_eq!(bool::deserialize(&mut Parser::new(b"true",), &mut buf).unwrap(), true);
-    assert_eq!(bool::deserialize(&mut Parser::new(b"false"), &mut buf).unwrap(), false);
+    assert_eq!(bool::deserialize(&mut Parser::new(b"true",  &mut [])).unwrap(), true);
+    assert_eq!(bool::deserialize(&mut Parser::new(b"false", &mut [])).unwrap(), false);
 }
 
 #[test]
 fn test_deserialize_integers() {
-    let mut buf = [0u8; 8];
-    assert_eq!(i64::deserialize(&mut Parser::new(b"42", ), &mut buf).unwrap(), 42i64);
-    assert_eq!(i64::deserialize(&mut Parser::new(b"-1", ), &mut buf).unwrap(), -1i64);
-    assert_eq!(u32::deserialize(&mut Parser::new(b"255",), &mut buf).unwrap(), 255u32);
-    assert_eq!(i8::deserialize( &mut Parser::new(b"-128"), &mut buf).unwrap(), i8::MIN);
-    assert_eq!(i8::deserialize( &mut Parser::new(b"127",), &mut buf).unwrap(), i8::MAX);
-    assert_eq!(u8::deserialize( &mut Parser::new(b"0",  ), &mut buf).unwrap(), 0u8);
-    assert_eq!(u8::deserialize( &mut Parser::new(b"255",), &mut buf).unwrap(), 255u8);
+    assert_eq!(i64::deserialize(&mut Parser::new(b"42",   &mut [])).unwrap(), 42i64);
+    assert_eq!(i64::deserialize(&mut Parser::new(b"-1",   &mut [])).unwrap(), -1i64);
+    assert_eq!(u32::deserialize(&mut Parser::new(b"255",  &mut [])).unwrap(), 255u32);
+    assert_eq!(i8::deserialize( &mut Parser::new(b"-128", &mut [])).unwrap(), i8::MIN);
+    assert_eq!(i8::deserialize( &mut Parser::new(b"127",  &mut [])).unwrap(), i8::MAX);
+    assert_eq!(u8::deserialize( &mut Parser::new(b"0",    &mut [])).unwrap(), 0u8);
+    assert_eq!(u8::deserialize( &mut Parser::new(b"255",  &mut [])).unwrap(), 255u8);
 }
 
 #[test]
 fn test_deserialize_integer_overflow() {
     // 300 doesn't fit in u8
-    let mut buf = [0u8; 8];
-    let err = u8::deserialize(&mut Parser::new(b"300"), &mut buf).unwrap_err();
+    let err = u8::deserialize(&mut Parser::new(b"300", &mut [])).unwrap_err();
     assert!(matches!(err.kind, ParseErrorKind::UnexpectedToken { .. }));
 }
 
 #[test]
 fn test_deserialize_option() {
-    let mut buf = [0u8; 16];
-    assert_eq!(Option::<bool>::deserialize(&mut Parser::new(b"null"),  &mut buf).unwrap(), None);
-    assert_eq!(Option::<bool>::deserialize(&mut Parser::new(b"false"), &mut buf).unwrap(), Some(false));
-    assert_eq!(Option::<i64>::deserialize( &mut Parser::new(b"null"),  &mut buf).unwrap(), None);
-    assert_eq!(Option::<i64>::deserialize( &mut Parser::new(b"99"),    &mut buf).unwrap(), Some(99));
+    assert_eq!(Option::<bool>::deserialize(&mut Parser::new(b"null",  &mut [])).unwrap(), None);
+    assert_eq!(Option::<bool>::deserialize(&mut Parser::new(b"false", &mut [])).unwrap(), Some(false));
+    assert_eq!(Option::<i64>::deserialize( &mut Parser::new(b"null",  &mut [])).unwrap(), None);
+    assert_eq!(Option::<i64>::deserialize( &mut Parser::new(b"99",    &mut [])).unwrap(), Some(99));
 }
 
 // ============================================================
@@ -1188,16 +1178,16 @@ fn test_float_non_finite_error() {
 #[test]
 fn test_f64_deserialize() {
     let mut buf = [0u8; 8];
-    assert_eq!(f64::deserialize(&mut Parser::new(b"1.5"),  &mut buf).unwrap(), 1.5);
-    assert_eq!(f64::deserialize(&mut Parser::new(b"-3.0"), &mut buf).unwrap(), -3.0);
-    assert_eq!(f64::deserialize(&mut Parser::new(b"0"),    &mut buf).unwrap(), 0.0);
-    assert_eq!(f64::deserialize(&mut Parser::new(b"1e2"),  &mut buf).unwrap(), 100.0);
+    assert_eq!(f64::deserialize(&mut Parser::new(b"1.5",  &mut buf)).unwrap(), 1.5);
+    assert_eq!(f64::deserialize(&mut Parser::new(b"-3.0", &mut buf)).unwrap(), -3.0);
+    assert_eq!(f64::deserialize(&mut Parser::new(b"0",    &mut buf)).unwrap(), 0.0);
+    assert_eq!(f64::deserialize(&mut Parser::new(b"1e2",  &mut buf)).unwrap(), 100.0);
 }
 
 #[test]
 fn test_f32_deserialize() {
     let mut buf = [0u8; 8];
-    assert!((f32::deserialize(&mut Parser::new(b"1.5"), &mut buf).unwrap() - 1.5f32).abs() < 1e-6);
+    assert!((f32::deserialize(&mut Parser::new(b"1.5", &mut buf)).unwrap() - 1.5f32).abs() < 1e-6);
 }
 
 #[cfg(feature = "std")]
@@ -1381,7 +1371,7 @@ fn test_hashmap_roundtrip() {
 fn test_fixed_array_deserialize() {
     let mut buf = [0u8; 8];
     let arr: [i32; 3] = Deserialize::deserialize(
-        &mut Parser::new(b"[1,2,3]"), &mut buf
+        &mut Parser::new(b"[1,2,3]", &mut buf)
     ).unwrap();
     assert_eq!(arr, [1, 2, 3]);
 }
@@ -1390,7 +1380,7 @@ fn test_fixed_array_deserialize() {
 fn test_fixed_array_deserialize_empty() {
     let mut buf = [0u8; 8];
     let arr: [i32; 0] = Deserialize::deserialize(
-        &mut Parser::new(b"[]"), &mut buf
+        &mut Parser::new(b"[]", &mut buf)
     ).unwrap();
     assert_eq!(arr, []);
 }
@@ -1399,7 +1389,7 @@ fn test_fixed_array_deserialize_empty() {
 fn test_fixed_array_too_short() {
     let mut buf = [0u8; 8];
     let r: Result<[i32; 3], _> = Deserialize::deserialize(
-        &mut Parser::new(b"[1,2]"), &mut buf
+        &mut Parser::new(b"[1,2]", &mut buf)
     );
     assert!(matches!(r.unwrap_err().kind,
         ParseErrorKind::UnexpectedToken { expected: "array item", got: "]" }
@@ -1410,7 +1400,7 @@ fn test_fixed_array_too_short() {
 fn test_fixed_array_too_long() {
     let mut buf = [0u8; 8];
     let r: Result<[i32; 2], _> = Deserialize::deserialize(
-        &mut Parser::new(b"[1,2,3]"), &mut buf
+        &mut Parser::new(b"[1,2,3]", &mut buf)
     );
     assert!(matches!(r.unwrap_err().kind,
         ParseErrorKind::UnexpectedToken { expected: "]", got: "array item" }

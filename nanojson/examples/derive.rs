@@ -147,3 +147,5 @@ fn main() {
     let n = nanojson::measure(|s| entity.serialize(s));
     std::println!("\nEntity serializes to {n} bytes — use stringify_sized::<{n}, _> or larger.");
 }
+
+#[cfg(test)] #[test] fn test_main() { main() }
