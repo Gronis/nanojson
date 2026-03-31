@@ -487,7 +487,7 @@ fn json_in_json_nested_roundtrip() {
         decoded = parse_as(decoded.as_bytes(), |p, buf| {
             p.object_begin()?;
             let mut payload = std::string::String::new();
-            while let Some(key) = p.object_member(buf)? {
+            while let Some(key) = p.object_member()? {
                 // Copy key out of buf so we can reuse buf for the value parse.
                 let key = std::string::String::from(key);
                 if key == "payload" {
@@ -511,7 +511,7 @@ fn json_in_json_nested_roundtrip() {
         let mut got_count   = 0i64;
         let mut got_tags    = std::vec::Vec::<std::string::String>::new();
         let mut got_message = std::string::String::new();
-        while let Some(key) = p.object_member(buf)? {
+        while let Some(key) = p.object_member()? {
             let key = std::string::String::from(key);
             match key.as_str() {
                 "name"    => got_name    = std::string::String::from(p.string(buf)?),

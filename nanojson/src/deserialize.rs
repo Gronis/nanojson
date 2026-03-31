@@ -41,9 +41,8 @@ impl Token {
 
 /// Immediate-mode JSON parser. Borrows the source (`'src`).
 ///
-/// A scratch buffer must be supplied to `string()` and `object_member()` calls
-/// for string decoding. This keeps the lifetime relationship explicit: the
-/// returned `&str` lives as long as the buffer you pass in.
+/// A scratch buffer must be supplied to `string()` calls for string decoding.
+/// `object_member()` borrows directly from the source and requires no buffer.
 ///
 /// # Example
 /// ```
@@ -67,6 +66,12 @@ pub struct Parser<'src> {
     key_start: usize,
 
     str_len: usize,
+    /// Byte offset in `src` of the first character after the opening `"`.
+    str_start_in_src: usize,
+    /// Byte offset in `src` of the closing `"` (exclusive end of content).
+    str_end_in_src: usize,
+    /// True when the last parsed string token contained any `\` escapes.
+    str_has_escapes: bool,
 
     token: Token,
     /// Source span of the last NUMBER token (points into `src`).
@@ -82,6 +87,9 @@ impl<'src> Parser<'src> {
             token_start: 0,
             key_start: 0,
             str_len: 0,
+            str_start_in_src: 0,
+            str_end_in_src: 0,
+            str_has_escapes: false,
             token: Token::Invalid,
             number_start: 0,
             number_end: 0,
@@ -108,7 +116,7 @@ impl<'src> Parser<'src> {
     /// Tokenize the next token. Writes decoded string bytes into `str_buf` when
     /// the token is a string; for all other tokens `str_buf` is not used.
     /// Pass `&mut []` when you do not expect a string token.
-    fn get_token(&mut self, str_buf: &mut [u8]) -> Result<(), ParseError> {
+    fn get_token<const WRITE_OUT_TOKEN: bool>(&mut self, str_buf: &mut [u8]) -> Result<(), ParseError> {
         self.skip_whitespace();
         self.token_start = self.pos;
 
@@ -181,6 +189,8 @@ impl<'src> Parser<'src> {
         if ch == b'"' {
             self.pos += 1;
             self.str_len = 0;
+            self.str_start_in_src = self.pos;
+            self.str_has_escapes = false;
 
             loop {
                 if self.pos >= self.src.len() {
@@ -192,11 +202,13 @@ impl<'src> Parser<'src> {
                 }
                 match self.src[self.pos] {
                     b'"' => {
+                        self.str_end_in_src = self.pos;
                         self.pos += 1;
                         self.token = Token::String;
                         return Ok(());
                     }
                     b'\\' => {
+                        self.str_has_escapes = true;
                         self.pos += 1;
                         if self.pos >= self.src.len() {
                             self.token = Token::Invalid;
@@ -241,13 +253,15 @@ impl<'src> Parser<'src> {
 
                             let (bytes, len) = encode_utf8_cp(cp);
                             for &byte in &bytes[..len] {
-                                if self.str_len >= str_buf.len() {
-                                    return Err(ParseError::at(
-                                        self.token_start,
-                                        ParseErrorKind::StringBufferOverflow,
-                                    ));
+                                if WRITE_OUT_TOKEN {
+                                    if self.str_len >= str_buf.len() {
+                                        return Err(ParseError::at(
+                                            self.token_start,
+                                            ParseErrorKind::StringBufferOverflow,
+                                        ));
+                                    }
+                                    str_buf[self.str_len] = byte;
                                 }
-                                str_buf[self.str_len] = byte;
                                 self.str_len += 1;
                             }
                         } else {
@@ -269,28 +283,33 @@ impl<'src> Parser<'src> {
                                     ));
                                 }
                             };
-                            if self.str_len >= str_buf.len() {
-                                return Err(ParseError::at(
-                                    self.token_start,
-                                    ParseErrorKind::StringBufferOverflow,
-                                ));
+                            if WRITE_OUT_TOKEN {
+                                if self.str_len >= str_buf.len() {
+                                    return Err(ParseError::at(
+                                        self.token_start,
+                                        ParseErrorKind::StringBufferOverflow,
+                                    ));
+                                }
+                                str_buf[self.str_len] = decoded;
                             }
-                            str_buf[self.str_len] = decoded;
                             self.str_len += 1;
                         }
                     }
                     _ => {
                         let b = self.src[self.pos];
                         self.pos += 1;
-                        if self.str_len < str_buf.len() {
-                            str_buf[self.str_len] = b;
-                            self.str_len += 1;
-                        } else if str_buf.len() > 0 {
-                            return Err(ParseError::at(
-                                self.token_start,
-                                ParseErrorKind::StringBufferOverflow,
-                            ));
+                        if WRITE_OUT_TOKEN {
+                            if self.str_len < str_buf.len() {
+                                str_buf[self.str_len] = b;
+                            } else if str_buf.len() > 0 {
+                                // TODO: this if should be rewritten
+                                return Err(ParseError::at(
+                                    self.token_start,
+                                    ParseErrorKind::StringBufferOverflow,
+                                ));
+                            }
                         }
+                        self.str_len += 1;
                     }
                 }
             }
@@ -319,7 +338,7 @@ impl<'src> Parser<'src> {
     /// Tokenize and expect a specific non-string token. Passes an empty buffer
     /// because no string decoding is needed for structural tokens.
     fn get_and_expect(&mut self, expected: Token) -> Result<(), ParseError> {
-        self.get_token(&mut [])?;
+        self.get_token::<false>(&mut [])?;
         self.expect_token(expected)
     }
 
@@ -333,6 +352,19 @@ impl<'src> Parser<'src> {
         })
     }
 
+    /// After a successful String token parsed with `get_token::<false>`, return
+    /// the raw source bytes as a `&'src str`. Returns `Err(KeyHasEscapes)` when
+    /// the string contained any backslash escape sequences.
+    fn current_string_src(&self) -> Result<&'src str, ParseError> {
+        if self.str_has_escapes {
+            return Err(ParseError::at(self.token_start, ParseErrorKind::KeyHasEscapes));
+        }
+        let bytes = &self.src[self.str_start_in_src..self.str_end_in_src];
+        core::str::from_utf8(bytes).map_err(|_| {
+            ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8)
+        })
+    }
+
     // ---- public API ----
 
     /// Parse `{`.
@@ -340,42 +372,56 @@ impl<'src> Parser<'src> {
         self.get_and_expect(Token::OpenCurly)
     }
 
+    /// Shared structural prologue for object-member parsing.
+    ///
+    /// Skips whitespace, returns `false` when `}` is next (without consuming
+    /// it so `object_end` can), consumes a `,` separator for subsequent
+    /// members, and returns `true` when the caller should now call `get_token`
+    /// to read the key string.
+    fn object_next_member(&mut self) -> Result<bool, ParseError> {
+        self.skip_whitespace();
+        if self.pos >= self.src.len() {
+            return Err(ParseError::at(self.pos, ParseErrorKind::UnexpectedEof));
+        }
+        match self.src[self.pos] {
+            b'}' => Ok(false),
+            b',' => {
+                self.token_start = self.pos;
+                self.token = Token::Comma;
+                self.pos += 1;
+                Ok(true)
+            }
+            _ => Ok(true), // first member; bad chars caught by get_token + expect_token
+        }
+    }
+
     /// Parse the next object member key, or return `None` when `}` is reached.
     ///
-    /// The returned string is decoded into `str_buf` and is valid for `'b`
-    /// (the lifetime of the buffer). Copy it or process it before the next call
-    /// that takes a `str_buf`.
-    pub fn object_member<'b>(&mut self, str_buf: &'b mut [u8]) -> Result<Option<&'b str>, ParseError> {
-        let saved_pos = self.pos;
-        self.get_token(str_buf)?;
-
-        match self.token {
-            Token::Comma => {
-                // Subsequent member: expect key string
-                self.get_token(str_buf)?;
-                self.expect_token(Token::String)?;
-                self.key_start = self.token_start;
-                self.get_and_expect(Token::Colon)?;
-                Ok(Some(self.current_string(str_buf)?))
-            }
-            Token::CloseCurly => {
-                self.pos = saved_pos;
-                Ok(None)
-            }
-            Token::String => {
-                // First member — key was decoded into str_buf by get_token
-                self.key_start = self.token_start;
-                self.get_and_expect(Token::Colon)?;
-                Ok(Some(self.current_string(str_buf)?))
-            }
-            _ => Err(ParseError::at(
-                self.token_start,
-                ParseErrorKind::UnexpectedToken {
-                    expected: "string or }",
-                    got: self.token.name(),
-                },
-            )),
+    /// The returned `&'src str` borrows directly from the original JSON source.
+    /// Plain (unescaped) keys are supported; keys containing backslash escapes
+    /// return `Err(ParseErrorKind::KeyHasEscapes)`.
+    pub fn object_member(&mut self) -> Result<Option<&'src str>, ParseError> {
+        if !self.object_next_member()? {
+            return Ok(None);
         }
+        self.get_token::<false>(&mut [])?;
+        self.expect_token(Token::String)?;
+        self.key_start = self.token_start;
+        self.get_and_expect(Token::Colon)?;
+        Ok(Some(self.current_string_src()?))
+    }
+
+    /// Like `object_member` but decodes the key into `str_buf`, supporting
+    /// escape sequences. Used internally by map deserializers.
+    fn object_member_decoded<'b>(&mut self, str_buf: &'b mut [u8]) -> Result<Option<&'b str>, ParseError> {
+        if !self.object_next_member()? {
+            return Ok(None);
+        }
+        self.get_token::<true>(str_buf)?;
+        self.expect_token(Token::String)?;
+        self.key_start = self.token_start;
+        self.get_and_expect(Token::Colon)?;
+        Ok(Some(self.current_string(str_buf)?))
     }
 
     /// Parse `}`.
@@ -433,7 +479,7 @@ impl<'src> Parser<'src> {
 
     /// Parse `true` or `false`, returning the value.
     pub fn boolean(&mut self) -> Result<bool, ParseError> {
-        self.get_token(&mut [])?;
+        self.get_token::<false>(&mut [])?;
         match self.token {
             Token::True  => Ok(true),
             Token::False => Ok(false),
@@ -450,7 +496,7 @@ impl<'src> Parser<'src> {
     /// overwritten on the next call to `string()` or `object_member()` that
     /// uses the same buffer.
     pub fn string<'b>(&mut self, str_buf: &'b mut [u8]) -> Result<&'b str, ParseError> {
-        self.get_token(str_buf)?;
+        self.get_token::<true>(str_buf)?;
         self.expect_token(Token::String)?;
         self.current_string(str_buf)
     }
@@ -686,7 +732,7 @@ macro_rules! impl_deserialize_map {
                 // Explicit loop so NLL can see the borrow from object_member ends
                 // after String::from(k) before the next reborrow.
                 loop {
-                    let maybe_key = parser.object_member(&mut *str_buf)?;
+                    let maybe_key = parser.object_member_decoded(&mut *str_buf)?;
                     let key = match maybe_key {
                         None => break,
                         Some(k) => alloc::string::String::from(k),
@@ -718,14 +764,14 @@ impl_deserialize_map!(
 /// Parse using a hand-written closure with a stack-allocated scratch buffer of `STR_BUF` bytes.
 ///
 /// The closure receives both a `&mut Parser` and a `&mut [u8]` scratch buffer.
-/// Pass the buffer to `string()` and `object_member()` calls.
+/// Pass the buffer to `string()` calls for string value decoding.
 ///
 /// # Example
 /// ```
 /// let (x, y) = nanojson::parse_sized_as(&mut [0u8; 16], b"{\"x\":3,\"y\":4}", |p, buf| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
-///     while let Some(k) = p.object_member(buf)? {
+///     while let Some(k) = p.object_member()? {
 ///         match k {
 ///             "x" => x = p.integer()?,
 ///             "y" => y = p.integer()?,
@@ -788,14 +834,14 @@ pub fn parse<T: for<'s, 'b> Deserialize<'s, 'b>,>(
 /// `T` must be a fully owned type (no borrows from the parser).
 ///
 /// The closure receives both a `&mut Parser` and a `&mut [u8]` scratch buffer.
-/// Pass the buffer to `string()` and `object_member()` calls.
+/// Pass the buffer to `string()` calls for string value decoding.
 ///
 /// # Example
 /// ```
 /// let (x, y) = nanojson::parse_as(b"{\"x\":3,\"y\":4}", |p, buf| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
-///     while let Some(k) = p.object_member(buf)? {
+///     while let Some(k) = p.object_member()? {
 ///         match k {
 ///             "x" => x = p.integer().unwrap(),
 ///             "y" => y = p.integer().unwrap(),

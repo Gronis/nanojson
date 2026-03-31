@@ -29,6 +29,10 @@ pub enum ParseErrorKind {
         expected_fields: &'static [&'static str],
     },
     MissingField { field: &'static str },
+    /// An object key contains backslash escape sequences; only plain (unescaped)
+    /// keys are supported by `object_member`. Use `parser.string(buf)` to decode
+    /// escaped keys into a scratch buffer.
+    KeyHasEscapes,
 }
 
 impl ParseError {
@@ -206,6 +210,8 @@ impl core::fmt::Display for ParseErrorKind {
             }
             ParseErrorKind::MissingField { field } =>
                 write!(f, "missing required field `{field}`"),
+            ParseErrorKind::KeyHasEscapes =>
+                f.write_str("object key contains escape sequences"),
         }
     }
 }

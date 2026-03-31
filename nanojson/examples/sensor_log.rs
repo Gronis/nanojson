@@ -40,9 +40,8 @@ enum SensorId {
 
 // ---- Parsing helpers ----
 
-/// Copy a &str from a nanojson scratch buffer into a fixed byte array.
-/// Call this *immediately* after `object_member()` or `string()` —
-/// the next parse call will overwrite the same scratch buffer.
+/// Copy a &str into a fixed byte array.
+/// Used for string *values* decoded into a scratch buffer via `string()`.
 fn copy_str<const N: usize>(s: &str) -> ([u8; N], usize) {
     let mut arr = [0u8; N];
     let len = s.len().min(N);
@@ -70,9 +69,8 @@ fn parse_record(json: &mut Parser, buf: &mut [u8]) -> Record {
     let mut value: Option<i64> = None;
     let mut code:  Option<i64> = None;
 
-    while let Some(key) = json.object_member(buf).unwrap() {
-        let (karr, klen) = copy_str::<16>(key);
-        match bstr(&karr, klen) {
+    while let Some(key) = json.object_member().unwrap() {
+        match key {
             "type" => {
                 let s = json.string(buf).unwrap();
                 let (a, l) = copy_str::<16>(s);

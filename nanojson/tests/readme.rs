@@ -65,7 +65,7 @@ fn test_readme_impl() -> Result<(), Error> {
     let (x, y) = nanojson::parse_as(json.as_bytes(), |p, buf| {
         p.object_begin()?;
         let mut x = 0i64; let mut y = 0i64;
-        while let Some(k) = p.object_member(buf)? {
+        while let Some(k) = p.object_member()? {
             match k {
                 "x" => x = p.integer()?,
                 "y" => y = p.integer()?,
@@ -103,7 +103,7 @@ fn test_readme_impl() -> Result<(), Error> {
     let (x, y) = nanojson::parse_sized_as(&mut [0; 64], json, |p, buf| {
         p.object_begin()?;
         let mut x = 0i64; let mut y = 0i64;
-        while let Some(k) = p.object_member(buf)? {
+        while let Some(k) = p.object_member()? {
             match k {
                 "x" => x = p.integer()?,
                 "y" => y = p.integer()?,

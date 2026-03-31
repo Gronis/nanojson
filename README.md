@@ -114,7 +114,7 @@ let json = r#"{"x": 3, "y": 4}"#;
 let (x, y) = nanojson::parse_as(&json, |p, buf| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
-    while let Some(k) = p.object_member(buf)? {
+    while let Some(k) = p.object_member()? {
         match k {
             "x" => x = p.integer()?,
             "y" => y = p.integer()?,
@@ -159,7 +159,7 @@ let json = r#"{"x": 3, "y": 4}"#.as_bytes();
 let (x, y) = nanojson::parse_sized_as(&mut [0; 64], &json, |p, buf| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
-    while let Some(k) = p.object_member(buf)? {
+    while let Some(k) = p.object_member()? {
         match k {
             "x" => x = p.integer()?,
             "y" => y = p.integer()?,

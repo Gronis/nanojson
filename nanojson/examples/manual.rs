@@ -54,13 +54,9 @@ fn main() {
 
     nanojson::parse_as(json.as_bytes(), |p, buf| {
         p.object_begin()?;
-        while let Some(key) = p.object_member(buf)? {
-            // Copy key before the next parse call overwrites the scratch buffer.
-            let mut key_buf = [0u8; 16];
-            let klen = key.len();
-            key_buf[..klen].copy_from_slice(key.as_bytes());
-
-            match core::str::from_utf8(&key_buf[..klen]).unwrap() {
+        while let Some(key) = p.object_member()? {
+            // key is &'src str — borrows the source, no copy needed.
+            match key {
                 "name" => {
                     let s = p.string(buf)?;
                     name_len = s.len();
@@ -76,11 +72,8 @@ fn main() {
                 }
                 "meta" => {
                     p.object_begin()?;
-                    while let Some(mk) = p.object_member(buf)? {
-                        let mut mb = [0u8; 16];
-                        let ml = mk.len();
-                        mb[..ml].copy_from_slice(mk.as_bytes());
-                        match core::str::from_utf8(&mb[..ml]).unwrap() {
+                    while let Some(mk) = p.object_member()? {
+                        match mk {
                             "active" => { active = p.boolean()?; }
                             "level"  => { level  = p.integer()?; }
                             other    => panic!("unknown meta field: {other}"),
@@ -130,9 +123,9 @@ fn main() {
     // ----------------------------------------------------------------
     // 4. no_std tier — parse with a 64-byte stack scratch buffer
     //
-    //    `Parser::new(src, &mut str_buf)` is the core no_std primitive.
     //    The scratch buffer only needs to fit the longest single string
     //    value after escape-decoding; 64 bytes is ample here.
+    //    Object keys borrow from the source directly — no buffer needed.
     // ----------------------------------------------------------------
 
     let mut name_bytes = [0u8; 32];
@@ -146,12 +139,8 @@ fn main() {
     let mut p = Parser::new(json.as_bytes());
 
     p.object_begin().unwrap();
-    while let Some(key) = p.object_member(&mut str_buf).unwrap() {
-        let mut kb = [0u8; 16];
-        let kl = key.len();
-        kb[..kl].copy_from_slice(key.as_bytes());
-
-        match core::str::from_utf8(&kb[..kl]).unwrap() {
+    while let Some(key) = p.object_member().unwrap() {
+        match key {
             "name" => {
                 let s = p.string(&mut str_buf).unwrap();
                 name_len = s.len();
@@ -167,11 +156,8 @@ fn main() {
             }
             "meta" => {
                 p.object_begin().unwrap();
-                while let Some(mk) = p.object_member(&mut str_buf).unwrap() {
-                    let mut mb = [0u8; 16];
-                    let ml = mk.len();
-                    mb[..ml].copy_from_slice(mk.as_bytes());
-                    match core::str::from_utf8(&mb[..ml]).unwrap() {
+                while let Some(mk) = p.object_member().unwrap() {
+                    match mk {
                         "active" => { active = p.boolean().unwrap(); }
                         "level"  => { level  = p.integer().unwrap(); }
                         other    => panic!("unknown meta field: {other}"),

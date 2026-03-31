@@ -216,7 +216,7 @@ fn gen_deserialize_object_fields(
     let expected_fields_expr = format!("&[{field_names}]");
 
     code.push_str("__json.object_begin()?;");
-    code.push_str("while let ::core::option::Option::Some(__key) = __json.object_member(__str_buf)? {");
+    code.push_str("while let ::core::option::Option::Some(__key) = __json.object_member()? {");
     code.push_str("match __key {");
     for f in fields {
         let fname = &f.name;
@@ -336,7 +336,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
         // ---- object path: struct variants + optional {"Unit": null} ----
         code.push_str("} else {");
         code.push_str("__json.object_begin()?;");
-        code.push_str("let __result = if let ::core::option::Option::Some(__tag) = __json.object_member(__str_buf)? {");
+        code.push_str("let __result = if let ::core::option::Option::Some(__tag) = __json.object_member()? {");
         code.push_str("match __tag {");
         for v in variants {
             let vname = &v.name;

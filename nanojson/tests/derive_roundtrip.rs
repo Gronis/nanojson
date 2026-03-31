@@ -286,7 +286,7 @@ fn test_manual_string_deserialize() {
     let mut count = 0i64;
 
     json.object_begin().unwrap();
-    while let Some(key) = json.object_member(&mut str_buf).unwrap() {
+    while let Some(key) = json.object_member().unwrap() {
         let k = key.to_owned();
         match k.as_str() {
             "label" => {
@@ -317,7 +317,7 @@ fn test_manual_escaped_string_deserialize() {
     let mut count = 0i64;
 
     json.object_begin().unwrap();
-    while let Some(key) = json.object_member(&mut str_buf).unwrap() {
+    while let Some(key) = json.object_member().unwrap() {
         let k = key.to_owned();
         match k.as_str() {
             "label" => {
@@ -347,7 +347,7 @@ fn sum_leaf_integers(json: &mut Parser<'_>, buf: &mut [u8]) -> i64 {
     if json.is_object_ahead() {
         let mut total = 0i64;
         json.object_begin().unwrap();
-        while let Some(_key) = json.object_member(buf).unwrap() {
+        while let Some(_key) = json.object_member().unwrap() {
             total += sum_leaf_integers(json, buf);
         }
         json.object_end().unwrap();
