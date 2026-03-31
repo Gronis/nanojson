@@ -30,7 +30,7 @@ pub enum ParseErrorKind {
     },
     MissingField { field: &'static str },
     /// An object key contains backslash escape sequences; only plain (unescaped)
-    /// keys are supported by `object_member`. Use `parser.string(buf)` to decode
+    /// keys are supported by `member`. Use `parser.string(buf)` to decode
     /// escaped keys into a scratch buffer.
     KeyHasEscapes,
 }

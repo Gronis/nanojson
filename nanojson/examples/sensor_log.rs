@@ -69,7 +69,7 @@ fn parse_record(json: &mut Parser) -> Record {
     let mut value: Option<i64> = None;
     let mut code:  Option<i64> = None;
 
-    while let Some(key) = json.object_member().unwrap() {
+    while let Some(key) = json.member().unwrap() {
         match key {
             "type" => {
                 let s = json.string().unwrap();
@@ -139,25 +139,25 @@ fn main() {
         json.array_begin()?;
 
         json.object_begin()?;
-          json.member_key("type").unwrap();   json.string("reading")?;
-          json.member_key("sensor").unwrap(); json.string("temp")?;
-          json.member_key("value").unwrap();  json.integer(2350)?;
+          json.member("type").unwrap();   json.string("reading")?;
+          json.member("sensor").unwrap(); json.string("temp")?;
+          json.member("value").unwrap();  json.integer(2350)?;
         json.object_end()?;
 
         json.object_begin()?;
-          json.member_key("type")?;   json.string("reading")?;
-          json.member_key("sensor")?; json.string("humidity")?;
-          json.member_key("value")?;  json.integer(6200)?;
+          json.member("type")?;   json.string("reading")?;
+          json.member("sensor")?; json.string("humidity")?;
+          json.member("value")?;  json.integer(6200)?;
         json.object_end()?;
 
         json.object_begin()?;
-          json.member_key("type")?; json.string("heartbeat")?;
+          json.member("type")?; json.string("heartbeat")?;
         json.object_end()?;
 
         json.object_begin()?;
-          json.member_key("type")?;   json.string("alert")?;
-          json.member_key("sensor")?; json.string("temp")?;
-          json.member_key("code")?;   json.integer(1)?;
+          json.member("type")?;   json.string("alert")?;
+          json.member("sensor")?; json.string("temp")?;
+          json.member("code")?;   json.integer(1)?;
         json.object_end()?;
 
         json.array_end()
@@ -197,25 +197,25 @@ fn main() {
         json.array_begin()?;
 
         json.object_begin()?;
-          json.member_key("type")?;   json.string("reading")?;
-          json.member_key("sensor")?; json.string("temp")?;
-          json.member_key("value")?;  json.integer(2350)?;
+          json.member("type")?;   json.string("reading")?;
+          json.member("sensor")?; json.string("temp")?;
+          json.member("value")?;  json.integer(2350)?;
         json.object_end()?;
 
         json.object_begin()?;
-          json.member_key("type")?;   json.string("reading")?;
-          json.member_key("sensor")?; json.string("humidity")?;
-          json.member_key("value")?;  json.integer(6200)?;
+          json.member("type")?;   json.string("reading")?;
+          json.member("sensor")?; json.string("humidity")?;
+          json.member("value")?;  json.integer(6200)?;
         json.object_end()?;
 
         json.object_begin()?;
-          json.member_key("type")?; json.string("heartbeat")?;
+          json.member("type")?; json.string("heartbeat")?;
         json.object_end()?;
 
         json.object_begin()?;
-          json.member_key("type")?;   json.string("alert")?;
-          json.member_key("sensor")?; json.string("temp")?;
-          json.member_key("code")?;   json.integer(1)?;
+          json.member("type")?;   json.string("alert")?;
+          json.member("sensor")?; json.string("temp")?;
+          json.member("code")?;   json.integer(1)?;
         json.object_end()?;
 
         json.array_end()
@@ -247,9 +247,9 @@ fn main() {
 
     let n = nanojson::measure(|json| {
         json.object_begin()?;
-          json.member_key("type")?;   json.string("reading")?;
-          json.member_key("sensor")?; json.string("temp")?;
-          json.member_key("value")?;  json.integer(2350)?;
+          json.member("type")?;   json.string("reading")?;
+          json.member("sensor")?; json.string("temp")?;
+          json.member("value")?;  json.integer(2350)?;
         json.object_end()
     });
     std::println!("\nA 'reading' record is {n} bytes when serialized.");

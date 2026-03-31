@@ -24,7 +24,7 @@ struct Scope {
 /// let mut w = SliceWriter::new(&mut buf);
 /// let mut ser: Serializer<_, 32> = Serializer::new(&mut w);
 /// ser.object_begin().unwrap();
-/// ser.member_key("x").unwrap(); ser.integer(1).unwrap();
+/// ser.member("x").unwrap(); ser.integer(1).unwrap();
 /// ser.object_end().unwrap();
 /// drop(ser);
 /// assert_eq!(w.written(), b"{\"x\":1}");
@@ -45,7 +45,7 @@ pub struct Serializer<W, const DEPTH: usize = 32> {
 pub enum SerializeError<E> {
     Write(E),
     DepthExceeded,
-    /// `member_key` / `member_key_bytes` was called outside an object scope,
+    /// `member` / `member_bytes` was called outside an object scope,
     /// or was called twice without an intervening value.
     InvalidState,
     /// The serializer generated invalid UTF-8 at some point.
@@ -406,11 +406,11 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
         Ok(())
     }
 
-    pub fn member_key(&mut self, key: &str) -> Result<(), SerializeError<W::Error>> {
-        self.member_key_bytes(key.as_bytes())
+    pub fn member(&mut self, key: &str) -> Result<(), SerializeError<W::Error>> {
+        self.member_bytes(key.as_bytes())
     }
 
-    pub fn member_key_bytes(&mut self, key: &[u8]) -> Result<(), SerializeError<W::Error>> {
+    pub fn member_bytes(&mut self, key: &[u8]) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
         match self.current_scope() {
             Some(s) if s.kind == ScopeKind::Object && !s.key => {}
@@ -570,7 +570,7 @@ macro_rules! impl_serialize_map {
         fn serialize<__W: Write>(&self, ser: &mut Serializer<__W>) -> Result<(), SerializeError<__W::Error>> {
             ser.object_begin()?;
             for (k, v) in self {
-                ser.member_key(k.as_ref())?;
+                ser.member(k.as_ref())?;
                 v.serialize(ser)?;
             }
             ser.object_end()
@@ -620,7 +620,7 @@ impl Serialize for () {
 /// let mut buf = [0u8; 32];
 /// let json = nanojson::stringify_sized_as(&mut buf, |s| {
 ///     s.object_begin()?;
-///     s.member_key("n")?; s.integer(7)?;
+///     s.member("n")?; s.integer(7)?;
 ///     s.object_end()
 /// }).unwrap();
 /// assert_eq!(json, "{\"n\":7}");
@@ -662,7 +662,7 @@ pub fn stringify_sized<'buf, T: Serialize>(
 /// let mut buf = [0u8; 64];
 /// let json = nanojson::stringify_sized_pretty_as(&mut buf, 2, |s| {
 ///     s.object_begin()?;
-///     s.member_key("x")?; s.integer(1)?;
+///     s.member("x")?; s.integer(1)?;
 ///     s.object_end()
 /// }).unwrap();
 /// assert_eq!(json, "{\n  \"x\": 1\n}");
@@ -711,7 +711,7 @@ pub fn stringify_sized_pretty<'buf, T: Serialize>(
 /// ```
 /// let n = nanojson::measure(|s| {
 ///     s.object_begin()?;
-///     s.member_key("x")?; s.integer(1)?;
+///     s.member("x")?; s.integer(1)?;
 ///     s.object_end()
 /// });
 /// assert_eq!(n, 7); // {"x":1}
@@ -750,7 +750,7 @@ pub fn stringify<T: Serialize>(
 /// ```
 /// let json = nanojson::stringify_as(|s| {
 ///     s.object_begin()?;
-///     s.member_key("x")?; s.integer(1)?;
+///     s.member("x")?; s.integer(1)?;
 ///     s.object_end()
 /// }).unwrap();
 /// assert_eq!(json, r#"{"x":1}"#);
@@ -792,7 +792,7 @@ pub fn stringify_pretty<T: Serialize>(
 /// ```
 /// let json = nanojson::stringify_pretty_as(2, |s| {
 ///     s.object_begin()?;
-///     s.member_key("x")?; s.integer(1)?;
+///     s.member("x")?; s.integer(1)?;
 ///     s.object_end()
 /// }).unwrap();
 /// assert_eq!(json, "{\n  \"x\": 1\n}");

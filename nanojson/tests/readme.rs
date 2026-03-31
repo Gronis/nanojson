@@ -49,8 +49,8 @@ fn test_readme_impl() -> Result<(), Error> {
     // Closure form for hand-written JSON
     let json: String = nanojson::stringify_as(|s| {
         s.object_begin()?;
-          s.member_key("name")?; s.string("Alice")?;
-          s.member_key("age")?;  s.integer(30)?;
+          s.member("name")?; s.string("Alice")?;
+          s.member("age")?;  s.integer(30)?;
         s.object_end()
     })?;
 
@@ -65,7 +65,7 @@ fn test_readme_impl() -> Result<(), Error> {
     let (x, y) = nanojson::parse_as(json.as_bytes(), |p| {
         p.object_begin()?;
         let mut x = 0i64; let mut y = 0i64;
-        while let Some(k) = p.object_member()? {
+        while let Some(k) = p.member()? {
             match k {
                 "x" => x = p.integer()?,
                 "y" => y = p.integer()?,
@@ -88,8 +88,8 @@ fn test_readme_impl() -> Result<(), Error> {
     // Closure form
     let json = nanojson::stringify_sized_as(&mut buf, |s| {
         s.object_begin()?;
-          s.member_key("name")?; s.string("Alice")?;
-          s.member_key("age")?;  s.integer(30)?;
+          s.member("name")?; s.string("Alice")?;
+          s.member("age")?;  s.integer(30)?;
         s.object_end()
     })?;
 
@@ -103,7 +103,7 @@ fn test_readme_impl() -> Result<(), Error> {
     let (x, y) = nanojson::parse_sized_as(&mut [0; 64], json, |p| {
         p.object_begin()?;
         let mut x = 0i64; let mut y = 0i64;
-        while let Some(k) = p.object_member()? {
+        while let Some(k) = p.member()? {
             match k {
                 "x" => x = p.integer()?,
                 "y" => y = p.integer()?,

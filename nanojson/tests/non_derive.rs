@@ -140,8 +140,8 @@ fn test_string_mixed_content() {
 fn test_string_with_special_json_chars_as_key() {
     let s = ser!(|j| {
         j.object_begin()?;
-        j.member_key("key/with/slashes")?; j.integer(1)?;
-        j.member_key("key\"with\"quotes")?; j.integer(2)?;
+        j.member("key/with/slashes")?; j.integer(1)?;
+        j.member("key\"with\"quotes")?; j.integer(2)?;
         j.object_end()
     });
     assert!(s.contains(r#""key/with/slashes""#));
@@ -184,8 +184,8 @@ fn test_array_mixed_types() {
 fn test_object() {
     let s = ser!(|j| {
         j.object_begin()?;
-        j.member_key("x")?; j.integer(1)?;
-        j.member_key("y")?; j.integer(2)?;
+        j.member("x")?; j.integer(1)?;
+        j.member("y")?; j.integer(2)?;
         j.object_end()
     });
     assert_eq!(s, r#"{"x":1,"y":2}"#);
@@ -197,8 +197,8 @@ fn test_nested_array_of_objects() {
         j.array_begin()?;
         for i in 0i64..3 {
             j.object_begin()?;
-            j.member_key("i")?; j.integer(i)?;
-            j.member_key("sq")?; j.integer(i * i)?;
+            j.member("i")?; j.integer(i)?;
+            j.member("sq")?; j.integer(i * i)?;
             j.object_end()?;
         }
         j.array_end()
@@ -226,13 +226,13 @@ fn test_deeply_nested_object() {
     // Object inside object inside object inside object
     let s = ser!(|j| {
         j.object_begin()?;
-        j.member_key("a")?;
+        j.member("a")?;
         j.object_begin()?;
-        j.member_key("b")?;
+        j.member("b")?;
         j.object_begin()?;
-        j.member_key("c")?;
+        j.member("c")?;
         j.object_begin()?;
-        j.member_key("d")?; j.integer(42)?;
+        j.member("d")?; j.integer(42)?;
         j.object_end()?;
         j.object_end()?;
         j.object_end()?;
@@ -253,18 +253,18 @@ fn test_recursive_tree_serialize() {
         -> Result<(), SerializeError<WriteError>>
     {
         j.object_begin()?;
-        j.member_key("v")?; j.integer(v)?;
-        j.member_key("l")?;
+        j.member("v")?; j.integer(v)?;
+        j.member("l")?;
         if let Some((lv, ll, lr)) = left {
             j.object_begin()?;
-            j.member_key("v")?; j.integer(lv)?;
-            j.member_key("l")?; j.integer(ll)?;
-            j.member_key("r")?; j.integer(lr)?;
+            j.member("v")?; j.integer(lv)?;
+            j.member("l")?; j.integer(ll)?;
+            j.member("r")?; j.integer(lr)?;
             j.object_end()?;
         } else {
             j.null()?;
         }
-        j.member_key("r")?;
+        j.member("r")?;
         if let Some(rv) = right {
             j.integer(rv)?;
         } else {
@@ -288,8 +288,8 @@ fn test_recursive_tree_serialize() {
 fn test_pretty_print_2space() {
     let s = ser!(pp=2, |j: &mut Serializer<&mut SliceWriter<'_>, 32>| {
         j.object_begin()?;
-        j.member_key("a")?; j.integer(1)?;
-        j.member_key("b")?;
+        j.member("a")?; j.integer(1)?;
+        j.member("b")?;
         j.array_begin()?;
         j.integer(2)?; j.integer(3)?;
         j.array_end()?;
@@ -303,12 +303,12 @@ fn test_pretty_print_4space() {
     let s = ser!(pp=4, |j: &mut Serializer<&mut SliceWriter<'_>, 32>| {
         j.array_begin()?;
         j.object_begin()?;
-        j.member_key("name")?; j.string("Alice")?;
-        j.member_key("age")?;  j.integer(30)?;
+        j.member("name")?; j.string("Alice")?;
+        j.member("age")?;  j.integer(30)?;
         j.object_end()?;
         j.object_begin()?;
-        j.member_key("name")?; j.string("Bob")?;
-        j.member_key("age")?;  j.integer(25)?;
+        j.member("name")?; j.string("Bob")?;
+        j.member("age")?;  j.integer(25)?;
         j.object_end()?;
         j.array_end()
     });
@@ -331,8 +331,8 @@ fn test_pretty_print_4space() {
 fn test_pretty_print_empty_containers() {
     let s = ser!(pp=2, |j: &mut Serializer<&mut SliceWriter<'_>, 32>| {
         j.object_begin()?;
-        j.member_key("arr")?; j.array_begin()?;  j.array_end()?;
-        j.member_key("obj")?; j.object_begin()?; j.object_end()?;
+        j.member("arr")?; j.array_begin()?;  j.array_end()?;
+        j.member("obj")?; j.object_begin()?; j.object_end()?;
         j.object_end()
     });
     assert_eq!(s, "{\n  \"arr\": [],\n  \"obj\": {}\n}");
@@ -356,38 +356,38 @@ fn test_buffer_full_mid_object() {
     let mut buf = [0u8; 6];
     let result = try_serialize::<32, _>(&mut buf, |j| {
         j.object_begin()?;
-        j.member_key("x")?;
+        j.member("x")?;
         j.integer(12345) // this should overflow the 6-byte buffer
     });
     assert!(matches!(result, Err(SerializeError::Write(WriteError::BufferFull))));
 }
 
 #[test]
-fn test_member_key_outside_object() {
-    // member_key at root level (no scope) should return InvalidState
+fn test_member_outside_object() {
+    // member at root level (no scope) should return InvalidState
     let mut buf = [0u8; 64];
     let mut w = SliceWriter::new(&mut buf);
     let mut json: Serializer<_, 32> = Serializer::new(&mut w);
-    assert!(matches!(json.member_key("x"), Err(SerializeError::InvalidState)));
+    assert!(matches!(json.member("x"), Err(SerializeError::InvalidState)));
 }
 
 #[test]
-fn test_member_key_inside_array() {
-    // member_key inside an array scope should return InvalidState
+fn test_member_inside_array() {
+    // member inside an array scope should return InvalidState
     let result = try_serialize::<32, _>(&mut [0u8; 64], |j| {
         j.array_begin()?;
-        j.member_key("x")
+        j.member("x")
     });
     assert!(matches!(result, Err(SerializeError::InvalidState)));
 }
 
 #[test]
-fn test_member_key_called_twice() {
-    // calling member_key twice without an intervening value should return InvalidState
+fn test_member_called_twice() {
+    // calling member twice without an intervening value should return InvalidState
     let result = try_serialize::<32, _>(&mut [0u8; 64], |j| {
         j.object_begin()?;
-        j.member_key("x")?;
-        j.member_key("y") // second key without a value
+        j.member("x")?;
+        j.member("y") // second key without a value
     });
     assert!(matches!(result, Err(SerializeError::InvalidState)));
 }
@@ -506,7 +506,7 @@ fn test_parse_whitespace_everywhere() {
     let mut x = 0i64;
     let mut y = false;
     j.object_begin().unwrap();
-    while let Some(key) = j.object_member().unwrap() {
+    while let Some(key) = j.member().unwrap() {
         match key {
             "x" => x = j.integer().unwrap(),
             "y" => y = j.boolean().unwrap(),
@@ -545,7 +545,7 @@ fn test_parse_array_of_objects() {
         let mut a = 0i64;
         let mut b = 0i64;
         j.object_begin().unwrap();
-        while let Some(key) = j.object_member().unwrap() {
+        while let Some(key) = j.member().unwrap() {
             match key {
                 "a" => a = j.integer().unwrap(),
                 "b" => b = j.integer().unwrap(),
@@ -588,21 +588,21 @@ fn test_parse_deeply_nested() {
     let mut buf = [0u8; 16];
     let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
-    assert_eq!(j.object_member().unwrap(), Some("a"));
+    assert_eq!(j.member().unwrap(), Some("a"));
     j.object_begin().unwrap();
-    assert_eq!(j.object_member().unwrap(), Some("b"));
+    assert_eq!(j.member().unwrap(), Some("b"));
     j.object_begin().unwrap();
-    assert_eq!(j.object_member().unwrap(), Some("c"));
+    assert_eq!(j.member().unwrap(), Some("c"));
     j.object_begin().unwrap();
-    assert_eq!(j.object_member().unwrap(), Some("d"));
+    assert_eq!(j.member().unwrap(), Some("d"));
     assert_eq!(j.integer::<i64>().unwrap(), 42);
-    assert_eq!(j.object_member().unwrap(), None);
+    assert_eq!(j.member().unwrap(), None);
     j.object_end().unwrap();
-    assert_eq!(j.object_member().unwrap(), None);
+    assert_eq!(j.member().unwrap(), None);
     j.object_end().unwrap();
-    assert_eq!(j.object_member().unwrap(), None);
+    assert_eq!(j.member().unwrap(), None);
     j.object_end().unwrap();
-    assert_eq!(j.object_member().unwrap(), None);
+    assert_eq!(j.member().unwrap(), None);
     j.object_end().unwrap();
 }
 
@@ -612,7 +612,7 @@ fn test_parse_null_values_in_object() {
     let mut buf = [0u8; 16];
     let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
-    while let Some(key) = j.object_member().unwrap() {
+    while let Some(key) = j.member().unwrap() {
         match key {
             "a" => j.null().unwrap(),
             "b" => { j.number_str().unwrap(); }
@@ -628,7 +628,7 @@ fn test_parse_empty_object() {
     let mut buf = [0u8; 8];
     let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
-    assert_eq!(j.object_member().unwrap(), None);
+    assert_eq!(j.member().unwrap(), None);
     j.object_end().unwrap();
 }
 
@@ -647,9 +647,9 @@ fn test_parse_object_single_field() {
     let mut buf = [0u8; 16];
     let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
-    assert_eq!(j.object_member().unwrap(), Some("k"));
+    assert_eq!(j.member().unwrap(), Some("k"));
     assert_eq!(j.integer::<i64>().unwrap(), 99);
-    assert_eq!(j.object_member().unwrap(), None);
+    assert_eq!(j.member().unwrap(), None);
     j.object_end().unwrap();
 }
 
@@ -683,7 +683,7 @@ fn parse_node(
     let mut left = -1i32;
     let mut right = -1i32;
     j.object_begin().unwrap();
-    while let Some(key) = j.object_member().unwrap() {
+    while let Some(key) = j.member().unwrap() {
         match key {
             "v" => value = j.integer().unwrap(),
             "l" => left  = parse_node(j, arena, count),
@@ -730,7 +730,7 @@ fn test_parse_recursive_list() {
     fn parse_list(j: &mut Parser<'_, '_>, out: &mut [i64; 8], n: &mut usize) {
         if j.is_null_ahead() { j.null().unwrap(); return; }
         j.object_begin().unwrap();
-        while let Some(key) = j.object_member().unwrap() {
+        while let Some(key) = j.member().unwrap() {
             match key {
                 "head" => {
                     out[*n] = j.integer().unwrap();
@@ -818,7 +818,7 @@ fn test_error_unexpected_eof_in_object() {
     let mut buf = [0u8; 16];
     let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
-    j.object_member().unwrap(); // key "x"
+    j.member().unwrap(); // key "x"
     // Trying to read a value hits EOF
     let err = j.number_str().unwrap_err();
     assert!(
@@ -881,7 +881,7 @@ fn test_error_wrong_type_number_expected() {
     let mut buf = [0u8; 16];
     let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
-    j.object_member().unwrap(); // key "x"
+    j.member().unwrap(); // key "x"
     let err = j.number_str().unwrap_err();
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedToken { expected: "number", .. }),
@@ -931,7 +931,7 @@ fn test_error_unexpected_token_in_object() {
     let mut buf = [0u8; 16];
     let mut j = Parser::new(src, &mut buf);
     j.object_begin().unwrap();
-    let err = j.object_member().unwrap_err();
+    let err = j.member().unwrap_err();
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedToken { expected: ":", .. }),
         "got {:?}", err.kind
@@ -980,7 +980,7 @@ fn test_unknown_field() {
     let mut buf = [0u8; 64];
     let mut j = Parser::new(b"{\"z\":99}", &mut buf);
     j.object_begin().unwrap();
-    assert_eq!(j.object_member().unwrap(), Some("z"));
+    assert_eq!(j.member().unwrap(), Some("z"));
     let err = j.unknown_field();
     assert!(matches!(err.kind, ParseErrorKind::UnknownField { .. }));
 }
@@ -997,9 +997,9 @@ fn test_roundtrip_object() {
         let mut w = SliceWriter::new(&mut out_buf);
         let mut json: Serializer<_, 32> = Serializer::new(&mut w);
         json.object_begin().unwrap();
-            json.member_key("name").unwrap();   json.string("Alice").unwrap();
-            json.member_key("age").unwrap();    json.integer(30).unwrap();
-            json.member_key("active").unwrap(); json.boolean(true).unwrap();
+            json.member("name").unwrap();   json.string("Alice").unwrap();
+            json.member("age").unwrap();    json.integer(30).unwrap();
+            json.member("active").unwrap(); json.boolean(true).unwrap();
         json.object_end().unwrap();
         w_len = w.pos();
     }
@@ -1010,7 +1010,7 @@ fn test_roundtrip_object() {
     let mut name_buf = [0u8; 16]; let mut name_len = 0;
     let mut age = 0i64;
     let mut active = false;
-    while let Some(key) = json.object_member().unwrap() {
+    while let Some(key) = json.member().unwrap() {
         match key {
             "name" => {
                 let s = json.string().unwrap();
@@ -1062,14 +1062,14 @@ fn test_roundtrip_nested_structure() {
         let mut w = SliceWriter::new(&mut out);
         let mut json: Serializer<_, 32> = Serializer::new(&mut w);
         json.object_begin().unwrap();
-            json.member_key("matrix").unwrap(); json.array_begin().unwrap();
+            json.member("matrix").unwrap(); json.array_begin().unwrap();
             for row in [[1i64, 2], [3, 4]] {
                 json.array_begin().unwrap();
                 for v in row { json.integer(v).unwrap(); }
                 json.array_end().unwrap();
             }
             json.array_end().unwrap();
-            json.member_key("label").unwrap(); json.string("grid").unwrap();
+            json.member("label").unwrap(); json.string("grid").unwrap();
         json.object_end().unwrap();
         w_len = w.pos();
     }
@@ -1079,7 +1079,7 @@ fn test_roundtrip_nested_structure() {
     j.object_begin().unwrap();
     let mut matrix = [[0i64; 2]; 2];
     let mut label_buf = [0u8; 8]; let mut label_len = 0;
-    while let Some(key) = j.object_member().unwrap() {
+    while let Some(key) = j.member().unwrap() {
         match key {
             "matrix" => {
                 j.array_begin().unwrap();
@@ -1343,7 +1343,7 @@ fn test_hashmap_deserialize() {
 #[test]
 fn test_map_key_with_escape_sequence() {
     // JSON spec allows escape sequences in object keys; map deserialization
-    // must decode them correctly (regression: object_member_decoded path).
+    // must decode them correctly (regression: member_decoded path).
     let m: std::collections::BTreeMap<std::string::String, i64> =
         nanojson::parse(r#"{"\u0041":1,"B":2}"#).unwrap();
     assert_eq!(m["A"], 1); // \u0041 == 'A'

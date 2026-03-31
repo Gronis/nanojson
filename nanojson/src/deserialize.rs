@@ -42,7 +42,7 @@ impl Token {
 /// Immediate-mode JSON parser. Borrows the source (`'src`).
 ///
 /// A scratch buffer (`'buf`) is supplied at construction and reused by every
-/// `string()` call. `object_member()` borrows directly from the source and
+/// `string()` call. `member()` borrows directly from the source and
 /// does not touch the buffer.
 ///
 /// # Example
@@ -405,7 +405,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// The returned `&'src str` borrows directly from the original JSON source.
     /// Plain (unescaped) keys are supported; keys containing backslash escapes
     /// return `Err(ParseErrorKind::KeyHasEscapes)`.
-    pub fn object_member(&mut self) -> Result<Option<&'src str>, ParseError> {
+    pub fn member(&mut self) -> Result<Option<&'src str>, ParseError> {
         if !self.object_next_member()? { return Ok(None) };
         self.get_and_expect(Token::String)?;
         self.key_start = self.token_start;
@@ -413,9 +413,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         Ok(Some(self.current_string_src()?))
     }
 
-    /// Like `object_member` but decodes the key into `self.str_buf`, supporting
+    /// Like `member` but decodes the key into `self.str_buf`, supporting
     /// escape sequences. Used internally by map deserializers.
-    fn object_member_decoded(&mut self) -> Result<Option<&str>, ParseError> {
+    fn member_decoded(&mut self) -> Result<Option<&str>, ParseError> {
         if !self.object_next_member()? { return Ok(None) };
         self.get_token::<true>()?;
         self.expect_token(Token::String)?;
@@ -430,7 +430,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     }
 
     /// Returns an `UnknownField` error at the current position.
-    /// Call this inside the `_` arm of your `object_member` match.
+    /// Call this inside the `_` arm of your `member` match.
     pub fn unknown_field(&self) -> ParseError {
         ParseError::at(self.key_start, ParseErrorKind::UnknownField { type_name: "", expected_fields: &[] })
     }
@@ -732,10 +732,10 @@ macro_rules! impl_deserialize_map {
             fn deserialize<'buf>(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
                 let mut map = $new;
                 parser.object_begin()?;
-                // Explicit loop so NLL can see the borrow from object_member_decoded ends
+                // Explicit loop so NLL can see the borrow from member_decoded ends
                 // after String::from(k) before the next call.
                 loop {
-                    let maybe_key = parser.object_member_decoded()?;
+                    let maybe_key = parser.member_decoded()?;
                     let key = match maybe_key {
                         None => break,
                         Some(k) => alloc::string::String::from(k),
@@ -773,7 +773,7 @@ impl_deserialize_map!(
 /// let (x, y) = nanojson::parse_sized_as(&mut [0u8; 16], b"{\"x\":3,\"y\":4}", |p| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
-///     while let Some(k) = p.object_member()? {
+///     while let Some(k) = p.member()? {
 ///         match k {
 ///             "x" => x = p.integer()?,
 ///             "y" => y = p.integer()?,
@@ -842,7 +842,7 @@ pub fn parse<T: for<'s> Deserialize<'s>>(
 /// let (x, y) = nanojson::parse_as(b"{\"x\":3,\"y\":4}", |p| {
 ///     p.object_begin()?;
 ///     let mut x = 0i64; let mut y = 0i64;
-///     while let Some(k) = p.object_member()? {
+///     while let Some(k) = p.member()? {
 ///         match k {
 ///             "x" => x = p.integer().unwrap(),
 ///             "y" => y = p.integer().unwrap(),

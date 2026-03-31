@@ -23,17 +23,17 @@ fn main() {
 
     let json = nanojson::stringify_as(|s| {
         s.object_begin()?;
-          s.member_key("name")?;   s.string("Alice")?;
-          s.member_key("scores")?;
+          s.member("name")?;   s.string("Alice")?;
+          s.member("scores")?;
             s.array_begin()?;
               s.integer(95)?;
               s.integer(87)?;
               s.integer(100)?;
             s.array_end()?;
-          s.member_key("meta")?;
+          s.member("meta")?;
             s.object_begin()?;
-              s.member_key("active")?; s.boolean(true)?;
-              s.member_key("level")?;  s.integer(3)?;
+              s.member("active")?; s.boolean(true)?;
+              s.member("level")?;  s.integer(3)?;
             s.object_end()?;
         s.object_end()
     })
@@ -54,7 +54,7 @@ fn main() {
 
     nanojson::parse_as(json.as_bytes(), |p| {
         p.object_begin()?;
-        while let Some(key) = p.object_member()? {
+        while let Some(key) = p.member()? {
             // key is &'src str — borrows the source, no copy needed.
             match key {
                 "name" => {
@@ -72,7 +72,7 @@ fn main() {
                 }
                 "meta" => {
                     p.object_begin()?;
-                    while let Some(mk) = p.object_member()? {
+                    while let Some(mk) = p.member()? {
                         match mk {
                             "active" => { active = p.boolean()?; }
                             "level"  => { level  = p.integer()?; }
@@ -102,17 +102,17 @@ fn main() {
     let mut buf = [0; 512];
     let json = nanojson::stringify_sized_as(&mut buf, |s| {
         s.object_begin()?;
-          s.member_key("name")?;   s.string("Alice")?;
-          s.member_key("scores")?;
+          s.member("name")?;   s.string("Alice")?;
+          s.member("scores")?;
             s.array_begin()?;
               s.integer(95)?;
               s.integer(87)?;
               s.integer(100)?;
             s.array_end()?;
-          s.member_key("meta")?;
+          s.member("meta")?;
             s.object_begin()?;
-              s.member_key("active")?; s.boolean(true)?;
-              s.member_key("level")?;  s.integer(3)?;
+              s.member("active")?; s.boolean(true)?;
+              s.member("level")?;  s.integer(3)?;
             s.object_end()?;
         s.object_end()
     })
@@ -139,7 +139,7 @@ fn main() {
     let mut p = Parser::new(json.as_bytes(), &mut str_buf);
 
     p.object_begin().unwrap();
-    while let Some(key) = p.object_member().unwrap() {
+    while let Some(key) = p.member().unwrap() {
         match key {
             "name" => {
                 let s = p.string().unwrap();
@@ -156,7 +156,7 @@ fn main() {
             }
             "meta" => {
                 p.object_begin().unwrap();
-                while let Some(mk) = p.object_member().unwrap() {
+                while let Some(mk) = p.member().unwrap() {
                     match mk {
                         "active" => { active = p.boolean().unwrap(); }
                         "level"  => { level  = p.integer().unwrap(); }
@@ -189,9 +189,9 @@ fn main() {
         let mut ser: Serializer<_, 16> = Serializer::with_pp(&mut w, 2);
 
         ser.object_begin().unwrap();
-          ser.member_key("name").unwrap();   ser.string(name).unwrap();
-          ser.member_key("active").unwrap(); ser.boolean(active).unwrap();
-          ser.member_key("level").unwrap();  ser.integer(level).unwrap();
+          ser.member("name").unwrap();   ser.string(name).unwrap();
+          ser.member("active").unwrap(); ser.boolean(active).unwrap();
+          ser.member("level").unwrap();  ser.integer(level).unwrap();
         ser.object_end().unwrap();
 
         pretty_len = w.pos();
@@ -205,8 +205,8 @@ fn main() {
 
     let n = nanojson::measure(|s| {
         s.object_begin()?;
-          s.member_key("name")?;  s.string("Alice")?;
-          s.member_key("level")?; s.integer(3)?;
+          s.member("name")?;  s.string("Alice")?;
+          s.member("level")?; s.integer(3)?;
         s.object_end()
     });
     std::println!("\n`{{\"name\":\"Alice\",\"level\":3}}` is {n} bytes.");

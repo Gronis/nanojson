@@ -286,7 +286,7 @@ fn test_manual_string_deserialize() {
     let mut count = 0i64;
 
     json.object_begin().unwrap();
-    while let Some(key) = json.object_member().unwrap() {
+    while let Some(key) = json.member().unwrap() {
         let k = key.to_owned();
         match k.as_str() {
             "label" => {
@@ -317,7 +317,7 @@ fn test_manual_escaped_string_deserialize() {
     let mut count = 0i64;
 
     json.object_begin().unwrap();
-    while let Some(key) = json.object_member().unwrap() {
+    while let Some(key) = json.member().unwrap() {
         let k = key.to_owned();
         match k.as_str() {
             "label" => {
@@ -347,7 +347,7 @@ fn sum_leaf_integers(json: &mut Parser) -> i64 {
     if json.is_object_ahead() {
         let mut total = 0i64;
         json.object_begin().unwrap();
-        while let Some(_key) = json.object_member().unwrap() {
+        while let Some(_key) = json.member().unwrap() {
             total += sum_leaf_integers(json);
         }
         json.object_end().unwrap();
@@ -508,8 +508,8 @@ fn test_stringify_sized_as() {
     let mut buf = [0; 64];
     let json = nanojson::stringify_sized_as(&mut buf, |s| {
         s.object_begin()?;
-        s.member_key("x")?; s.integer(10)?;
-        s.member_key("y")?; s.integer(20)?;
+        s.member("x")?; s.integer(10)?;
+        s.member("y")?; s.integer(20)?;
         s.object_end()
     }).unwrap();
     let p: Point = nanojson::parse_sized(&mut [0; 32], json).unwrap();
@@ -529,8 +529,8 @@ fn test_measure_matches_stringify_sized() {
 fn test_measure_closure() {
     let n = nanojson::measure(|s| {
         s.object_begin()?;
-        s.member_key("x")?; s.integer(42)?;
-        s.member_key("y")?; s.integer(-1)?;
+        s.member("x")?; s.integer(42)?;
+        s.member("y")?; s.integer(-1)?;
         s.object_end()
     });
     // {"x":42,"y":-1} = 15 bytes
@@ -573,8 +573,8 @@ fn test_stringify_from_bytes_roundtrip() {
 fn test_stringify_as_closure() {
     let json = nanojson::stringify_as(|s| {
         s.object_begin()?;
-        s.member_key("x")?; s.integer(7)?;
-        s.member_key("y")?; s.integer(-2)?;
+        s.member("x")?; s.integer(7)?;
+        s.member("y")?; s.integer(-2)?;
         s.object_end()
     }).unwrap();
     assert_eq!(json, r#"{"x":7,"y":-2}"#);

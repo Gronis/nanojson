@@ -462,13 +462,13 @@ fn json_in_json_nested_roundtrip() {
     // ── step 1: build the initial JSON ────────────────────────────────────────
     let initial = stringify_as(|s| {
         s.object_begin()?;
-        s.member_key("name")?;    s.string(name)?;
-        s.member_key("count")?;   s.integer(count)?;
-        s.member_key("tags")?;
+        s.member("name")?;    s.string(name)?;
+        s.member("count")?;   s.integer(count)?;
+        s.member("tags")?;
         s.array_begin()?;
         for tag in &tags { s.string(tag)?; }
         s.array_end()?;
-        s.member_key("message")?; s.string(message)?;
+        s.member("message")?; s.string(message)?;
         s.object_end()
     }).unwrap();
 
@@ -478,8 +478,8 @@ fn json_in_json_nested_roundtrip() {
     for level in 1i64..=3 {
         let next = stringify_as(|s| {
             s.object_begin()?;
-            s.member_key("level")?;   s.integer(level)?;
-            s.member_key("payload")?; s.string(&encoded)?;
+            s.member("level")?;   s.integer(level)?;
+            s.member("payload")?; s.string(&encoded)?;
             s.object_end()
         }).unwrap();
         encoded = next;
@@ -491,7 +491,7 @@ fn json_in_json_nested_roundtrip() {
         decoded = parse_as(decoded.as_bytes(), |p| {
             p.object_begin()?;
             let mut payload = std::string::String::new();
-            while let Some(key) = p.object_member()? {
+            while let Some(key) = p.member()? {
                 // Copy key out of buf so we can reuse buf for the value parse.
                 let key = std::string::String::from(key);
                 if key == "payload" {
@@ -515,7 +515,7 @@ fn json_in_json_nested_roundtrip() {
         let mut got_count   = 0i64;
         let mut got_tags    = std::vec::Vec::<std::string::String>::new();
         let mut got_message = std::string::String::new();
-        while let Some(key) = p.object_member()? {
+        while let Some(key) = p.member()? {
             let key = std::string::String::from(key);
             match key.as_str() {
                 "name"    => got_name    = std::string::String::from(p.string()?),

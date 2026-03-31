@@ -97,8 +97,8 @@ let json: String = nanojson::stringify(&entity)?;
 // Closure form for hand-written JSON
 let json: String = nanojson::stringify_as(|s| {
     s.object_begin()?;
-      s.member_key("name")?; s.string("Alice")?;
-      s.member_key("age")?;  s.integer(30)?;
+      s.member("name")?; s.string("Alice")?;
+      s.member("age")?;  s.integer(30)?;
     s.object_end()
 })?;
 ```
@@ -114,7 +114,7 @@ let json = r#"{"x": 3, "y": 4}"#;
 let (x, y) = nanojson::parse_as(&json, |p| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
-    while let Some(k) = p.object_member()? {
+    while let Some(k) = p.member()? {
         match k {
             "x" => x = p.integer()?,
             "y" => y = p.integer()?,
@@ -142,8 +142,8 @@ let json = nanojson::stringify_sized(&mut buf, &entity)?;
 // Closure form
 let json = nanojson::stringify_sized_as(&mut buf, |s| {
     s.object_begin()?;
-      s.member_key("name")?; s.string("Alice")?;
-      s.member_key("age")?;  s.integer(30)?;
+      s.member("name")?; s.string("Alice")?;
+      s.member("age")?;  s.integer(30)?;
     s.object_end()
 })?;
 ```
@@ -159,7 +159,7 @@ let json = r#"{"x": 3, "y": 4}"#.as_bytes();
 let (x, y) = nanojson::parse_sized_as(&mut [0; 64], &json, |p| {
     p.object_begin()?;
     let mut x = 0i64; let mut y = 0i64;
-    while let Some(k) = p.object_member()? {
+    while let Some(k) = p.member()? {
         match k {
             "x" => x = p.integer()?,
             "y" => y = p.integer()?,
@@ -242,7 +242,7 @@ match nanojson::parse::<MyStruct>(json) {
 |---|---|
 | `Write(e)` | Write error from the sink (e.g. `WriteError::BufferFull` from `SliceWriter`) |
 | `DepthExceeded` | Nesting exceeded the `DEPTH` const generic (default 32) |
-| `InvalidState` | `member_key` called outside an object or twice without an intervening value |
+| `InvalidState` | `member` called outside an object or twice without an intervening value |
 | `InvalidUtf8(offset)` | Final string isn't utf-8 compatible. This indicates a serialization bug |
 
 ---
@@ -269,8 +269,8 @@ nanojson/
 
 | Concept | What it is |
 |---|---|
-| `Serializer<W>` | Serializer. You call methods (`object_begin`, `member_key`, `integer`, …) in order and it writes JSON to your `W: Write` sink. |
-| `Parser<'src, 'buf>` | Pull parser. You drive it step by step (`object_begin`, `object_member`, `integer`, …). It never builds a tree. |
+| `Serializer<W>` | Serializer. You call methods (`object_begin`, `member`, `integer`, …) in order and it writes JSON to your `W: Write` sink. |
+| `Parser<'src, 'buf>` | Pull parser. You drive it step by step (`object_begin`, `member`, `integer`, …). It never builds a tree. |
 | `Write` | Trait for output sinks. `SliceWriter` writes into a `&mut [u8]`. `SizeCounter` counts bytes without writing (useful for pre-sizing). `Vec<u8>` implements `Write` when the `std` feature is on. |
 | `Serialize` | Trait implemented by types that know how to write themselves. Primitive impls are provided. |
 | `Deserialize` | Trait implemented by types that know how to parse themselves. |
@@ -279,7 +279,7 @@ nanojson/
 
 ## Limitations
 
-- **Scratch buffer is reused per string.** `Parser::string()` and `Parser::object_member()` both write into the same `&mut [u8]`. The returned `&str` is invalidated by the next string parse. Copy the value immediately if you need to keep it.
+- **Scratch buffer is reused per string.** `Parser::string()` and `Parser::member()` both write into the same `&mut [u8]`. The returned `&str` is invalidated by the next string parse. Copy the value immediately if you need to keep it.
 - **No streaming / async.** The serializer writes synchronously to `Write`; the parser requires the entire input to be in memory at once.
 - **No `serde` compatibility.** nanojson is its own trait ecosystem. If you need serde interop, use serde.
 - **Non-finite floats are an error.** Serializing `f32::NAN`, `f64::INFINITY`, etc. returns `SerializeError::InvalidValue`. JSON has no representation for these values.

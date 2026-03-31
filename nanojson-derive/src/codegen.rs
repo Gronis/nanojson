@@ -87,7 +87,7 @@ fn gen_serialize_fields(fields: &[ParsedField], self_expr: &str) -> Result<Strin
         let fname = &f.name;
         let jname = escape_rust_str(&f.json_name);
         stmts.push_str(&format!(
-            "__json.member_key({jname})?; \
+            "__json.member({jname})?; \
              ::nanojson::Serialize::serialize(&{self_expr}.{fname}, __json)?;"
         ));
     }
@@ -114,13 +114,13 @@ fn gen_serialize_enum(variants: &[ParsedVariant]) -> Result<String, TokenStream>
                     .collect();
                 let mut body = String::new();
                 body.push_str("__json.object_begin()?;");
-                body.push_str(&format!("__json.member_key({jname})?;"));
+                body.push_str(&format!("__json.member({jname})?;"));
                 body.push_str("__json.object_begin()?;");
                 for f in fields {
                     let fname = &f.name;
                     let fjname = escape_rust_str(&f.json_name);
                     body.push_str(&format!(
-                        "__json.member_key({fjname})?; \
+                        "__json.member({fjname})?; \
                          ::nanojson::Serialize::serialize({fname}, __json)?;"
                     ));
                 }
@@ -215,7 +215,7 @@ fn gen_deserialize_object_fields(
     let expected_fields_expr = format!("&[{field_names}]");
 
     code.push_str("__json.object_begin()?;");
-    code.push_str("while let ::core::option::Option::Some(__key) = __json.object_member()? {");
+    code.push_str("while let ::core::option::Option::Some(__key) = __json.member()? {");
     code.push_str("match __key {");
     for f in fields {
         let fname = &f.name;
@@ -335,7 +335,7 @@ fn gen_deserialize_enum(name: &str, variants: &[ParsedVariant]) -> Result<String
         // ---- object path: struct variants + optional {"Unit": null} ----
         code.push_str("} else {");
         code.push_str("__json.object_begin()?;");
-        code.push_str("let __result = if let ::core::option::Option::Some(__tag) = __json.object_member()? {");
+        code.push_str("let __result = if let ::core::option::Option::Some(__tag) = __json.member()? {");
         code.push_str("match __tag {");
         for v in variants {
             let vname = &v.name;
