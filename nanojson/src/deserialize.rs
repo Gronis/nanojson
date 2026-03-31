@@ -692,10 +692,11 @@ where
 #[cfg(feature = "arrayvec")]
 impl<'src, const N: usize> Deserialize<'src> for arrayvec::ArrayString<N> {
     fn deserialize<'buf>(parser: &mut Parser<'src, 'buf>) -> Result<Self, ParseError> {
+        let off = parser.error_offset();
         let s = parser.string()?;
+        let off = off + s.as_bytes().len();
         arrayvec::ArrayString::try_from(s).map_err(|_| ParseError::at(
-            parser.error_offset(),
-            ParseErrorKind::StringBufferOverflow,
+            off, ParseErrorKind::StringBufferOverflow,
         ))
     }
 }
