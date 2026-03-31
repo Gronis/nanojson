@@ -401,11 +401,8 @@ impl<'src> Parser<'src> {
     /// Plain (unescaped) keys are supported; keys containing backslash escapes
     /// return `Err(ParseErrorKind::KeyHasEscapes)`.
     pub fn object_member(&mut self) -> Result<Option<&'src str>, ParseError> {
-        if !self.object_next_member()? {
-            return Ok(None);
-        }
-        self.get_token::<false>(&mut [])?;
-        self.expect_token(Token::String)?;
+        if !self.object_next_member()? { return Ok(None) };
+        self.get_and_expect(Token::String)?;
         self.key_start = self.token_start;
         self.get_and_expect(Token::Colon)?;
         Ok(Some(self.current_string_src()?))
@@ -414,9 +411,7 @@ impl<'src> Parser<'src> {
     /// Like `object_member` but decodes the key into `str_buf`, supporting
     /// escape sequences. Used internally by map deserializers.
     fn object_member_decoded<'b>(&mut self, str_buf: &'b mut [u8]) -> Result<Option<&'b str>, ParseError> {
-        if !self.object_next_member()? {
-            return Ok(None);
-        }
+        if !self.object_next_member()? { return Ok(None) };
         self.get_token::<true>(str_buf)?;
         self.expect_token(Token::String)?;
         self.key_start = self.token_start;
