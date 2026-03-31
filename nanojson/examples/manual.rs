@@ -32,7 +32,7 @@ fn main() {
             s.array_end()?;
           s.member_key("meta")?;
             s.object_begin()?;
-              s.member_key("active")?; s.bool_val(true)?;
+              s.member_key("active")?; s.boolean(true)?;
               s.member_key("level")?;  s.integer(3)?;
             s.object_end()?;
         s.object_end()
@@ -69,7 +69,7 @@ fn main() {
                 "scores" => {
                     p.array_begin()?;
                     while p.array_item()? {
-                        scores[score_count] = p.number_str()?.parse().unwrap();
+                        scores[score_count] = p.integer()?;
                         score_count += 1;
                     }
                     p.array_end()?;
@@ -81,8 +81,8 @@ fn main() {
                         let ml = mk.len();
                         mb[..ml].copy_from_slice(mk.as_bytes());
                         match core::str::from_utf8(&mb[..ml]).unwrap() {
-                            "active" => { active = p.bool_val()?; }
-                            "level"  => { level  = p.number_str()?.parse().unwrap(); }
+                            "active" => { active = p.boolean()?; }
+                            "level"  => { level  = p.integer()?; }
                             other    => panic!("unknown meta field: {other}"),
                         }
                     }
@@ -118,7 +118,7 @@ fn main() {
             s.array_end()?;
           s.member_key("meta")?;
             s.object_begin()?;
-              s.member_key("active")?; s.bool_val(true)?;
+              s.member_key("active")?; s.boolean(true)?;
               s.member_key("level")?;  s.integer(3)?;
             s.object_end()?;
         s.object_end()
@@ -160,7 +160,7 @@ fn main() {
             "scores" => {
                 p.array_begin().unwrap();
                 while p.array_item().unwrap() {
-                    scores[score_count] = p.number_str().unwrap().parse().unwrap();
+                    scores[score_count] = p.integer().unwrap();
                     score_count += 1;
                 }
                 p.array_end().unwrap();
@@ -172,8 +172,8 @@ fn main() {
                     let ml = mk.len();
                     mb[..ml].copy_from_slice(mk.as_bytes());
                     match core::str::from_utf8(&mb[..ml]).unwrap() {
-                        "active" => { active = p.bool_val().unwrap(); }
-                        "level"  => { level  = p.number_str().unwrap().parse().unwrap(); }
+                        "active" => { active = p.boolean().unwrap(); }
+                        "level"  => { level  = p.integer().unwrap(); }
                         other    => panic!("unknown meta field: {other}"),
                     }
                 }
@@ -204,7 +204,7 @@ fn main() {
 
         ser.object_begin().unwrap();
           ser.member_key("name").unwrap();   ser.string(name).unwrap();
-          ser.member_key("active").unwrap(); ser.bool_val(active).unwrap();
+          ser.member_key("active").unwrap(); ser.boolean(active).unwrap();
           ser.member_key("level").unwrap();  ser.integer(level).unwrap();
         ser.object_end().unwrap();
 

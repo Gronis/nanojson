@@ -295,7 +295,7 @@ fn test_manual_string_deserialize() {
                 label_bytes[..label_len].copy_from_slice(s.as_bytes());
             }
             "count" => {
-                count = json.number_str().unwrap().parse().unwrap();
+                count = json.integer().unwrap();
             }
             _ => panic!("unexpected field"),
         }
@@ -326,7 +326,7 @@ fn test_manual_escaped_string_deserialize() {
                 label_bytes[..label_len].copy_from_slice(s.as_bytes());
             }
             "count" => {
-                count = json.number_str().unwrap().parse().unwrap();
+                count = json.integer().unwrap();
             }
             _ => panic!("unexpected field"),
         }
@@ -367,7 +367,7 @@ fn sum_leaf_integers(json: &mut Parser<'_>, buf: &mut [u8]) -> i64 {
         json.null().unwrap();
         0
     } else if json.is_bool_ahead() {
-        json.bool_val().unwrap();
+        json.boolean().unwrap();
         0
     } else if json.is_string_ahead() {
         json.string(buf).unwrap();

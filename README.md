@@ -116,8 +116,8 @@ let (x, y) = nanojson::parse_as(&json, |p, buf| {
     let mut x = 0i64; let mut y = 0i64;
     while let Some(k) = p.object_member(buf)? {
         match k {
-            "x" => x = p.number_str()?.parse().unwrap(),
-            "y" => y = p.number_str()?.parse().unwrap(),
+            "x" => x = p.integer()?,
+            "y" => y = p.integer()?,
             _   => {}
         }
     }
@@ -161,8 +161,8 @@ let (x, y) = nanojson::parse_sized_as(&mut [0; 64], &json, |p, buf| {
     let mut x = 0i64; let mut y = 0i64;
     while let Some(k) = p.object_member(buf)? {
         match k {
-            "x" => x = p.number_str()?.parse().unwrap(),
-            "y" => y = p.number_str()?.parse().unwrap(),
+            "x" => x = p.integer()?,
+            "y" => y = p.integer()?,
             _   => {}
         }
     }
@@ -270,7 +270,7 @@ nanojson/
 | Concept | What it is |
 |---|---|
 | `Serializer<W>` | Serializer. You call methods (`object_begin`, `member_key`, `integer`, …) in order and it writes JSON to your `W: Write` sink. |
-| `Parser<'src, 'buf>` | Pull parser. You drive it step by step (`object_begin`, `object_member`, `number_str`, …). It never builds a tree. |
+| `Parser<'src, 'buf>` | Pull parser. You drive it step by step (`object_begin`, `object_member`, `integer`, …). It never builds a tree. |
 | `Write` | Trait for output sinks. `SliceWriter` writes into a `&mut [u8]`. `SizeCounter` counts bytes without writing (useful for pre-sizing). `Vec<u8>` implements `Write` when the `std` feature is on. |
 | `Serialize` | Trait implemented by types that know how to write themselves. Primitive impls are provided. |
 | `Deserialize` | Trait implemented by types that know how to parse themselves. |

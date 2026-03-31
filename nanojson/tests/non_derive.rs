@@ -55,8 +55,8 @@ fn test_null() { assert_eq!(ser!(|j| j.null()), "null"); }
 
 #[test]
 fn test_bool() {
-    assert_eq!(ser!(|j| j.bool_val(true)),  "true");
-    assert_eq!(ser!(|j| j.bool_val(false)), "false");
+    assert_eq!(ser!(|j| j.boolean(true)),  "true");
+    assert_eq!(ser!(|j| j.boolean(false)), "false");
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn test_array_mixed_types() {
     let s = ser!(|j| {
         j.array_begin()?;
         j.null()?;
-        j.bool_val(true)?;
+        j.boolean(true)?;
         j.integer(-1)?;
         j.string("hi")?;
         j.array_end()
@@ -448,8 +448,8 @@ fn test_parse_null() {
 
 #[test]
 fn test_parse_bool() {
-    assert!( Parser::new(b"true", ).bool_val().unwrap());
-    assert!(!Parser::new(b"false",).bool_val().unwrap());
+    assert!( Parser::new(b"true", ).boolean().unwrap());
+    assert!(!Parser::new(b"false",).boolean().unwrap());
 }
 
 #[test]
@@ -511,8 +511,8 @@ fn test_parse_whitespace_everywhere() {
     j.object_begin().unwrap();
     while let Some(key) = j.object_member(&mut buf).unwrap() {
         match key {
-            "x" => x = j.number_str().unwrap().parse().unwrap(),
-            "y" => y = j.bool_val().unwrap(),
+            "x" => x = j.integer().unwrap(),
+            "y" => y = j.boolean().unwrap(),
             _ => panic!("unexpected key"),
         }
     }
@@ -529,7 +529,7 @@ fn test_parse_whitespace_in_array() {
     j.array_begin().unwrap();
     let mut i = 0;
     while j.array_item().unwrap() {
-        v[i] = j.number_str().unwrap().parse().unwrap();
+        v[i] = j.integer().unwrap();
         i += 1;
     }
     j.array_end().unwrap();
@@ -550,8 +550,8 @@ fn test_parse_array_of_objects() {
         j.object_begin().unwrap();
         while let Some(key) = j.object_member(&mut buf).unwrap() {
             match key {
-                "a" => a = j.number_str().unwrap().parse().unwrap(),
-                "b" => b = j.number_str().unwrap().parse().unwrap(),
+                "a" => a = j.integer().unwrap(),
+                "b" => b = j.integer().unwrap(),
                 _   => panic!("unexpected key"),
             }
         }
@@ -574,7 +574,7 @@ fn test_parse_array_of_arrays() {
         j.array_begin().unwrap();
         let mut col = 0;
         while j.array_item().unwrap() {
-            grid[row][col] = j.number_str().unwrap().parse().unwrap();
+            grid[row][col] = j.integer().unwrap();
             col += 1;
         }
         j.array_end().unwrap();
@@ -598,7 +598,7 @@ fn test_parse_deeply_nested() {
     assert_eq!(j.object_member(&mut buf).unwrap(), Some("c"));
     j.object_begin().unwrap();
     assert_eq!(j.object_member(&mut buf).unwrap(), Some("d"));
-    assert_eq!(j.number_str().unwrap().parse::<i64>().unwrap(), 42);
+    assert_eq!(j.integer::<i64>().unwrap(), 42);
     assert_eq!(j.object_member(&mut buf).unwrap(), None);
     j.object_end().unwrap();
     assert_eq!(j.object_member(&mut buf).unwrap(), None);
@@ -651,7 +651,7 @@ fn test_parse_object_single_field() {
     let mut j = Parser::new(src);
     j.object_begin().unwrap();
     assert_eq!(j.object_member(&mut buf).unwrap(), Some("k"));
-    assert_eq!(j.number_str().unwrap().parse::<i64>().unwrap(), 99);
+    assert_eq!(j.integer::<i64>().unwrap(), 99);
     assert_eq!(j.object_member(&mut buf).unwrap(), None);
     j.object_end().unwrap();
 }
@@ -689,7 +689,7 @@ fn parse_node<'src>(
     j.object_begin().unwrap();
     while let Some(key) = j.object_member(buf).unwrap() {
         match key {
-            "v" => value = j.number_str().unwrap().parse().unwrap(),
+            "v" => value = j.integer().unwrap(),
             "l" => left  = parse_node(j, arena, count, buf),
             "r" => right = parse_node(j, arena, count, buf),
             _   => panic!("unexpected tree field: {key}"),
@@ -739,7 +739,7 @@ fn test_parse_recursive_list() {
         while let Some(key) = j.object_member(buf).unwrap() {
             match key {
                 "head" => {
-                    out[*n] = j.number_str().unwrap().parse().unwrap();
+                    out[*n] = j.integer().unwrap();
                     *n += 1;
                 }
                 "tail" => parse_list(j, out, n, buf),
@@ -900,7 +900,7 @@ fn test_error_wrong_type_number_expected() {
 #[test]
 fn test_error_wrong_type_bool_expected() {
     let src = b"42";
-    let err = Parser::new(src).bool_val().unwrap_err();
+    let err = Parser::new(src).boolean().unwrap_err();
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedToken { expected: "boolean", .. }),
         "got {:?}", err.kind
@@ -947,7 +947,7 @@ fn test_error_unexpected_token_in_object() {
 #[test]
 fn test_error_invalid_token() {
     let src = b"xyz";  // not a valid JSON token
-    let err = Parser::new(src).bool_val().unwrap_err();
+    let err = Parser::new(src).boolean().unwrap_err();
     // This should produce UnexpectedToken or a similar error
     assert!(
         matches!(err.kind, ParseErrorKind::UnexpectedToken { .. }),
@@ -1005,7 +1005,7 @@ fn test_roundtrip_object() {
         json.object_begin().unwrap();
             json.member_key("name").unwrap();   json.string("Alice").unwrap();
             json.member_key("age").unwrap();    json.integer(30).unwrap();
-            json.member_key("active").unwrap(); json.bool_val(true).unwrap();
+            json.member_key("active").unwrap(); json.boolean(true).unwrap();
         json.object_end().unwrap();
         w_len = w.pos();
     }
@@ -1024,7 +1024,7 @@ fn test_roundtrip_object() {
                 name_buf[..name_len].copy_from_slice(s.as_bytes());
             }
             "age"    => { age    = json.number_str().unwrap().parse().unwrap(); }
-            "active" => { active = json.bool_val().unwrap(); }
+            "active" => { active = json.boolean().unwrap(); }
             _        => panic!("unexpected key"),
         }
     }

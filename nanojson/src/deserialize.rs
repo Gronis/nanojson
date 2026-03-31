@@ -1,3 +1,5 @@
+use core::str::FromStr;
+
 use crate::error::{ParseError, ParseErrorKind};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -51,7 +53,7 @@ impl Token {
 /// p.array_begin().unwrap();
 /// let mut sum = 0i64;
 /// while p.array_item().unwrap() {
-///     sum += p.number_str().unwrap().parse::<i64>().unwrap();
+///     sum += p.integer::<i64>().unwrap();
 /// }
 /// p.array_end().unwrap();
 /// assert_eq!(sum, 6);
@@ -430,7 +432,7 @@ impl<'src> Parser<'src> {
     }
 
     /// Parse `true` or `false`, returning the value.
-    pub fn bool_val(&mut self) -> Result<bool, ParseError> {
+    pub fn boolean(&mut self) -> Result<bool, ParseError> {
         self.get_token(&mut [])?;
         match self.token {
             Token::True  => Ok(true),
@@ -462,6 +464,28 @@ impl<'src> Parser<'src> {
         core::str::from_utf8(bytes).map_err(|_| {
             ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8)
         })
+    }
+
+    /// Parse a JSON number and return the raw source bytes as a float type
+    /// (either `f32` or `f64`).
+    pub fn float<Num: FromStr>(&mut self) -> Result<Num, ParseError> {
+        let s = self.number_str()?;
+        let offset = self.error_offset();
+        s.parse::<Num>().map_err(|_| ParseError::at(
+            offset,
+            ParseErrorKind::UnexpectedToken { expected: "number", got: "invalid float" },
+        ))
+    }
+
+    /// Parse a JSON number and return the raw source bytes as an integer type
+    /// (either `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, or `u64`).
+    pub fn integer<Num: FromStr>(&mut self) -> Result<Num, ParseError> {
+        let s = self.number_str()?;
+        let offset = self.error_offset();
+        s.parse::<Num>().map_err(|_| ParseError::at(
+            offset,
+            ParseErrorKind::UnexpectedToken { expected: "number", got: "int out of range" },
+        ))
     }
 
     // ---- lookahead ----
@@ -509,7 +533,7 @@ pub trait Deserialize<'src, 'buf>: Sized {
 
 impl<'src, 'buf> Deserialize<'src, 'buf> for bool {
     fn deserialize(parser: &mut Parser<'src>, _str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
-        parser.bool_val()
+        parser.boolean()
     }
 }
 
@@ -530,12 +554,7 @@ macro_rules! impl_float {
     ($($t:ty),*) => {$(
         impl<'src, 'buf> Deserialize<'src, 'buf> for $t {
             fn deserialize(parser: &mut Parser<'src>, _str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
-                let s = parser.number_str()?;
-                let offset = parser.error_offset();
-                s.parse::<$t>().map_err(|_| ParseError::at(
-                    offset,
-                    ParseErrorKind::UnexpectedToken { expected: "number", got: "invalid float" },
-                ))
+                parser.float()
             }
         }
     )*};
@@ -546,61 +565,12 @@ macro_rules! impl_integer {
     ($($t:ty),*) => {$(
         impl<'src, 'buf> Deserialize<'src, 'buf> for $t {
             fn deserialize(parser: &mut Parser<'src>, _str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
-                let s = parser.number_str()?;
-                integer_from_str::<$t>(s, parser.token_start)
+                parser.integer()
             }
         }
     )*};
 }
 impl_integer!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
-
-fn integer_from_str<T: IntParse>(s: &str, offset: usize) -> Result<T, ParseError> {
-    T::from_str(s).ok_or_else(|| ParseError::at(
-        offset,
-        ParseErrorKind::UnexpectedToken { expected: "integer", got: "number out of range" },
-    ))
-}
-
-trait IntParse: Sized {
-    fn from_str(s: &str) -> Option<Self>;
-}
-
-macro_rules! impl_int_parse {
-    (signed: $($t:ty),*) => {$(
-        impl IntParse for $t {
-            fn from_str(s: &str) -> Option<Self> {
-                let bytes = s.as_bytes();
-                if bytes.is_empty() { return None; }
-                let (neg, digits) = if bytes[0] == b'-' { (true, &bytes[1..]) } else { (false, bytes) };
-                if digits.is_empty() { return None; }
-                // Accumulate as a negative value so that i8::MIN (-128) parses correctly.
-                // 128 doesn't fit as positive i8 before negation, but -128 fits as-is.
-                let mut v: $t = 0;
-                for &b in digits {
-                    if b < b'0' || b > b'9' { return None; }
-                    v = v.checked_mul(10)?.checked_sub((b - b'0') as $t)?;
-                }
-                if neg { Some(v) } else { v.checked_neg() }
-            }
-        }
-    )*};
-    (unsigned: $($t:ty),*) => {$(
-        impl IntParse for $t {
-            fn from_str(s: &str) -> Option<Self> {
-                let bytes = s.as_bytes();
-                if bytes.is_empty() || bytes[0] == b'-' { return None; }
-                let mut v: $t = 0;
-                for &b in bytes {
-                    if b < b'0' || b > b'9' { return None; }
-                    v = v.checked_mul(10)?.checked_add((b - b'0') as $t)?;
-                }
-                Some(v)
-            }
-        }
-    )*};
-}
-impl_int_parse!(signed:   i8, i16, i32, i64, i128, isize);
-impl_int_parse!(unsigned: u8, u16, u32, u64, u128, usize);
 
 impl<'src, 'buf, T: Deserialize<'src, 'buf>> Deserialize<'src, 'buf> for Option<T> {
     fn deserialize(parser: &mut Parser<'src>, str_buf: &'buf mut [u8]) -> Result<Self, ParseError> {
@@ -757,8 +727,8 @@ impl_deserialize_map!(
 ///     let mut x = 0i64; let mut y = 0i64;
 ///     while let Some(k) = p.object_member(buf)? {
 ///         match k {
-///             "x" => x = p.number_str()?.parse().unwrap(),
-///             "y" => y = p.number_str()?.parse().unwrap(),
+///             "x" => x = p.integer()?,
+///             "y" => y = p.integer()?,
 ///             _ => return Err(p.unknown_field()),
 ///         }
 ///     }
@@ -827,8 +797,8 @@ pub fn parse<T: for<'s, 'b> Deserialize<'s, 'b>,>(
 ///     let mut x = 0i64; let mut y = 0i64;
 ///     while let Some(k) = p.object_member(buf)? {
 ///         match k {
-///             "x" => x = p.number_str()?.parse().unwrap(),
-///             "y" => y = p.number_str()?.parse().unwrap(),
+///             "x" => x = p.integer().unwrap(),
+///             "y" => y = p.integer().unwrap(),
 ///             _ => return Err(p.unknown_field()),
 ///         }
 ///     }

@@ -515,7 +515,7 @@ fn json_in_json_nested_roundtrip() {
             let key = std::string::String::from(key);
             match key.as_str() {
                 "name"    => got_name    = std::string::String::from(p.string(buf)?),
-                "count"   => got_count   = p.number_str()?.parse().unwrap(),
+                "count"   => got_count   = p.integer()?,
                 "tags"    => {
                     p.array_begin()?;
                     while p.array_item()? {

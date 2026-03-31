@@ -84,10 +84,10 @@ fn parse_record(json: &mut Parser, buf: &mut [u8]) -> Record {
                 sensor_arr = a; sensor_len = l;
             }
             "value" => {
-                value = Some(json.number_str().unwrap().parse().unwrap());
+                value = json.integer().ok();
             }
             "code" => {
-                code = Some(json.number_str().unwrap().parse().unwrap());
+                code = json.integer().ok();
             }
             _ => { json.null().ok(); }
         }

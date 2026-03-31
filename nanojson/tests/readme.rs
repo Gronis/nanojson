@@ -67,8 +67,8 @@ fn test_readme_impl() -> Result<(), Error> {
         let mut x = 0i64; let mut y = 0i64;
         while let Some(k) = p.object_member(buf)? {
             match k {
-                "x" => x = p.number_str()?.parse().unwrap(),
-                "y" => y = p.number_str()?.parse().unwrap(),
+                "x" => x = p.integer()?,
+                "y" => y = p.integer()?,
                 _   => {}
             }
         }
@@ -105,8 +105,8 @@ fn test_readme_impl() -> Result<(), Error> {
         let mut x = 0i64; let mut y = 0i64;
         while let Some(k) = p.object_member(buf)? {
             match k {
-                "x" => x = p.number_str()?.parse().unwrap(),
-                "y" => y = p.number_str()?.parse().unwrap(),
+                "x" => x = p.integer()?,
+                "y" => y = p.integer()?,
                 _   => {}
             }
         }

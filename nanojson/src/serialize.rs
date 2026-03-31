@@ -305,7 +305,7 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
         Ok(())
     }
 
-    pub fn bool_val(&mut self, v: bool) -> Result<(), SerializeError<W::Error>> {
+    pub fn boolean(&mut self, v: bool) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
         self.write(if v { b"true" } else { b"false" })?;
         self.element_end();
@@ -315,6 +315,31 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
     pub fn integer(&mut self, v: i64) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
         self.write_integer_raw(v)?;
+        self.element_end();
+        Ok(())
+    }
+
+    pub fn float(&mut self, v: f64) -> Result<(), SerializeError<W::Error>> {
+        if !v.is_finite() {
+            return Err(SerializeError::InvalidValue("float must be finite (not NaN or Infinity)"));
+        }
+        // Format into a 32-byte stack buffer via core::fmt::Write — no alloc needed.
+        let mut buf = [0u8; 32];
+        let mut pos = 0usize;
+        struct FloatBuf<'a>(&'a mut [u8], &'a mut usize);
+        impl core::fmt::Write for FloatBuf<'_> {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                let b = s.as_bytes();
+                let end = *self.1 + b.len();
+                if end > self.0.len() { return Err(core::fmt::Error); }
+                self.0[*self.1..end].copy_from_slice(b);
+                *self.1 = end;
+                Ok(())
+            }
+        }
+        let _ = core::fmt::write(&mut FloatBuf(&mut buf, &mut pos), format_args!("{v}"));
+        self.element_begin()?;
+        self.number_raw(&buf[..pos])?;
         self.element_end();
         Ok(())
     }
@@ -433,7 +458,7 @@ pub trait Serialize {
 
 impl Serialize for bool {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.bool_val(*self)
+        ser.boolean(*self)
     }
 }
 
@@ -514,39 +539,15 @@ impl<T: Serialize, const N: usize> Serialize for [T; N] {
     }
 }
 
-fn serialize_float<W: Write>(ser: &mut Serializer<W>, v: f64) -> Result<(), SerializeError<W::Error>> {
-    if !v.is_finite() {
-        return Err(SerializeError::InvalidValue("float must be finite (not NaN or Infinity)"));
-    }
-    // Format into a 32-byte stack buffer via core::fmt::Write — no alloc needed.
-    let mut buf = [0u8; 32];
-    let mut pos = 0usize;
-    struct FloatBuf<'a>(&'a mut [u8], &'a mut usize);
-    impl core::fmt::Write for FloatBuf<'_> {
-        fn write_str(&mut self, s: &str) -> core::fmt::Result {
-            let b = s.as_bytes();
-            let end = *self.1 + b.len();
-            if end > self.0.len() { return Err(core::fmt::Error); }
-            self.0[*self.1..end].copy_from_slice(b);
-            *self.1 = end;
-            Ok(())
-        }
-    }
-    let _ = core::fmt::write(&mut FloatBuf(&mut buf, &mut pos), format_args!("{v}"));
-    // SAFETY: `FloatBuf::write_str` copies bytes from `&str` arguments only,
-    // so every byte written is valid UTF-8.
-    ser.number_raw(&buf[..pos])
-}
-
 impl Serialize for f32 {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        serialize_float(ser, *self as f64)
+        ser.float(*self as f64)
     }
 }
 
 impl Serialize for f64 {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        serialize_float(ser, *self)
+        ser.float(*self as f64)
     }
 }
 
