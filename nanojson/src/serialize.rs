@@ -107,7 +107,7 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
         }
     }
 
-    pub fn with_pp(writer: W, indent: usize) -> Self {
+    pub fn with_pretty(writer: W, indent: usize) -> Self {
         let mut s = Self::new(writer);
         s.pp = indent;
         s
@@ -594,7 +594,7 @@ fn stringify_sized_impl<'buf>(
     f: impl FnOnce(&mut Serializer<&mut crate::write::SliceWriter<'_>>) -> Result<(), SerializeError<WriteError>>,
 ) -> Result<&'buf str, SerializeError<WriteError>> {
     let mut w = crate::write::SliceWriter::new(buf);
-    let mut ser = Serializer::with_pp(&mut w, pp);
+    let mut ser = Serializer::with_pretty(&mut w, pp);
     f(&mut ser)?;
     let len = w.pos();
     core::str::from_utf8(&buf[..len]).map_err(|e| SerializeError::InvalidUtf8(e.valid_up_to()))
@@ -708,7 +708,7 @@ fn serialize_to_vec(
     pp: usize,
     f: impl FnOnce(&mut Serializer<std::vec::Vec<u8>>) -> Result<(), SerializeError<core::convert::Infallible>>,
 ) -> Result<std::vec::Vec<u8>, SerializeError<core::convert::Infallible>> {
-    let mut ser: Serializer<_> = Serializer::with_pp(std::vec::Vec::new(), pp);
+    let mut ser: Serializer<_> = Serializer::with_pretty(std::vec::Vec::new(), pp);
     f(&mut ser)?;
     Ok(ser.into_writer())
 }
@@ -1067,7 +1067,7 @@ fn smart_format(
 ///
 /// # Example
 /// ```
-/// let json = nanojson::stringify_smart_pretty_as(20, 2, |s| {
+/// let json = nanojson::stringify_compact_as(20, 2, |s| {
 ///     s.object_begin()?;
 ///     s.member("x")?; s.integer(1)?;
 ///     s.member("ys")?;
@@ -1082,7 +1082,7 @@ fn smart_format(
 /// ```
 #[cfg(feature = "std")]
 #[inline]
-pub fn stringify_smart_pretty_as(
+pub fn stringify_compact_as(
     line_width: usize,
     indent: usize,
     f: impl FnOnce(&mut Serializer<std::vec::Vec<u8>>) -> Result<(), SerializeError<core::convert::Infallible>>,
@@ -1098,22 +1098,22 @@ pub fn stringify_smart_pretty_as(
 ///
 /// # Example
 /// ```
-/// let json = nanojson::stringify_smart_pretty(&[1i64, 2, 3], 40, 2).unwrap();
+/// let json = nanojson::stringify_compact(&[1i64, 2, 3], 40, 2).unwrap();
 /// assert_eq!(json, "[1, 2, 3]");
 /// ```
 #[cfg(feature = "std")]
 #[inline]
-pub fn stringify_smart_pretty<T: Serialize>(
+pub fn stringify_compact<T: Serialize>(
     val: &T,
     line_width: usize,
     indent: usize,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
-    stringify_smart_pretty_as(line_width, indent, |s| val.serialize(s))
+    stringify_compact_as(line_width, indent, |s| val.serialize(s))
 }
 
 /// An imperative-style smart compact pretty-printer.
 ///
-/// Equivalent to [`stringify_smart_pretty_as`] but without the closure — useful when
+/// Equivalent to [`stringify_compact_as`] but without the closure — useful when
 /// the JSON structure is not known until runtime or when you prefer to call serializer
 /// methods directly rather than through a closure.
 ///

@@ -176,10 +176,10 @@ fn test_readme_impl() -> Result<(), Error> {
     assert_eq!(entity, entity2);
 
     // Pretty-printing
-    // Low-level — use Serializer::with_pp directly:
+    // Low-level — use Serializer::with_pretty directly:
     let mut buf = [0u8; 256];
     let mut w = SliceWriter::new(&mut buf);
-    let mut ser: Serializer<_, 16> = Serializer::with_pp(&mut w, 2); // 2-space indent
+    let mut ser: Serializer<_, 16> = Serializer::with_pretty(&mut w, 2); // 2-space indent
 
     Ok(())
 }

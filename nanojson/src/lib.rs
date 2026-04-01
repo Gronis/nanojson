@@ -19,7 +19,7 @@ pub use deserialize::{parse_sized, parse_sized_as};
 
 #[cfg(feature = "std")]
 pub use serialize::{stringify, stringify_as, stringify_pretty, stringify_pretty_as,
-                    stringify_smart_pretty, stringify_smart_pretty_as,
+                    stringify_compact, stringify_compact_as,
                     SmartSerializer};
 
 #[cfg(feature = "std")]

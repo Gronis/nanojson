@@ -184,14 +184,14 @@ let n = nanojson::measure(|s| entity.serialize(s));
 
 ## Pretty-printing
 
-Pass an indent width to the `_pretty` variants of any serialization function:
+Pass an indent width to the `_pretty` or `_compact` variants of any serialization function:
 
 ```rust
 // std tier
-let json = nanojson::stringify_pretty(2, &entity)?;
+let json = nanojson::stringify_pretty(2, &entity)?;       // indent level 
 let json = nanojson::stringify_pretty_as(2, |s| { ... })?;
-let json = nanojson::stringify_smart_pretty(80, 2, &entity)?;
-let json = nanojson::stringify_smart_pretty_as(80, 2, |s| { ... })?;
+let json = nanojson::stringify_compact(80, 2, &entity)?;  // line len + indent
+let json = nanojson::stringify_compact_as(80, 2, |s| { ... })?;
 
 // no_std tier
 let mut buf = [0; 256];
@@ -199,11 +199,22 @@ let json = nanojson::stringify_sized_pretty(&mut buf, 2, &entity)?;
 let json = nanojson::stringify_sized_pretty_as(&mut buf, 2, |s| { ... })?;
 ```
 
+Pretty
 ```json
 {
   "name": "Alice",
-  "active": true,
-  "level": 3
+  "status": {
+    "active": true,
+    "level": 3
+  }
+}
+```
+
+Compact: (max line length 50)
+```json
+{
+  "name": "Alice", 
+  "status": { "active": true, "level": 3 }
 }
 ```
 
@@ -286,7 +297,9 @@ nanojson/
 - **No `serde` compatibility.** nanojson is its own trait ecosystem. If you need serde interop, use serde.
 - **Non-finite floats are an error.** Serializing `f32::NAN`, `f64::INFINITY`, etc. returns `SerializeError::InvalidValue`. JSON has no representation for these values.
 - **Nesting depth limit.** The serializer's `DEPTH` const generic (default 32) limits how deeply you can nest objects and arrays. Use `Serializer<W, 64>` directly for deeper structures.
-- **No tuple enum variants** Use `enum Kind { A { number: i32 } }` instead of `enum Kind { A(i32) }`
+- **No multi member tuple enum variants** 
+  - Use `enum Kind { A { number: i32, name: String } }` instead
+    of  `enum Kind { A(i32, String) }`
 
 ---
 

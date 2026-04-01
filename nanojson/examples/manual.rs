@@ -186,7 +186,7 @@ fn main() {
     let pretty_len;
     {
         let mut w = SliceWriter::new(&mut pretty_buf);
-        let mut ser: Serializer<_, 16> = Serializer::with_pp(&mut w, 2);
+        let mut ser: Serializer<_, 16> = Serializer::with_pretty(&mut w, 2);
 
         ser.object_begin().unwrap();
           ser.member("name").unwrap();   ser.string(name).unwrap();
