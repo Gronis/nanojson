@@ -1537,3 +1537,130 @@ fn test_u128_roundtrip() {
         assert_eq!(v, back, "roundtrip failed for {v:?}");
     }
 }
+
+// ============================================================
+// ---- Smart pretty-print ----
+// ============================================================
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_short_array_inline() {
+    // [1,2,3] = 7 bytes ≤ 40 → stays on one line
+    let json = nanojson::stringify_smart_pretty(&[1i64, 2, 3], 40, 2).unwrap();
+    assert_eq!(json, "[1, 2, 3]");
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_long_array_expanded() {
+    // array of 5 short strings, line_width=20.
+    // Compact: ["aaa","bbb","ccc","ddd","eee"] = 31 bytes > 20 → expands.
+    // Each "aaa" is 5 bytes ≤ 20 → inline. Flow packing: 2 fit per line.
+    //   line1 (col 2): "aaa"(5)=7, +", "+"bbb"=14 ≤ 20, +", "+"ccc"=21>20 → wrap
+    //   line2 (col 2): "ccc"(5)=7, +", "+"ddd"=14 ≤ 20, +", "+"eee"=21>20 → wrap
+    //   line3 (col 2): "eee"
+    let json = nanojson::stringify_smart_pretty_as(20, 2, |s| {
+        s.array_begin()?;
+        for w in ["aaa", "bbb", "ccc", "ddd", "eee"] { s.string(w)?; }
+        s.array_end()
+    }).unwrap();
+    assert_eq!(json, "[\n  \"aaa\", \"bbb\",\n  \"ccc\", \"ddd\",\n  \"eee\"\n]");
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_flow_pack_multiple_per_line() {
+    // 6 short objects packed with line_width=40.
+    // Compact: [{"id":1},...,{"id":6}] = 55 bytes > 40 → expands.
+    // Each {"id": N} spaced = 9 bytes.
+    // col 2: 9=11, +2+9=22, +2+9=33, +2+9=44>40 → wrap
+    // col 2: 9=11, +2+9=22
+    let json = nanojson::stringify_smart_pretty_as(40, 2, |s| {
+        s.array_begin()?;
+        for i in 1i64..=6 {
+            s.object_begin()?;
+            s.member("id")?; s.integer(i)?;
+            s.object_end()?;
+        }
+        s.array_end()
+    }).unwrap();
+    assert_eq!(
+        json,
+        "[\n  {\"id\": 1}, {\"id\": 2}, {\"id\": 3},\n  {\"id\": 4}, {\"id\": 5}, {\"id\": 6}\n]"
+    );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_selective_expansion() {
+    // {"x":[1,2,3],"y":42} = 20 bytes; use line_width=19 to force outer expansion.
+    // [1,2,3] = 7 bytes ≤ 19 → inner stays compact with spacing: [1, 2, 3]
+    let json = nanojson::stringify_smart_pretty_as(19, 2, |s| {
+        s.object_begin()?;
+        s.member("x")?; s.array_begin()?; s.integer(1)?; s.integer(2)?; s.integer(3)?; s.array_end()?;
+        s.member("y")?; s.integer(42)?;
+        s.object_end()
+    }).unwrap();
+    assert_eq!(json, "{\n  \"x\": [1, 2, 3],\n  \"y\": 42\n}");
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_empty_containers() {
+    // {"a":[],"b":{}} = 15 bytes; use line_width=10 to force outer expansion.
+    // [] and {} are 2 bytes ≤ 10 → always stay compact.
+    let json = nanojson::stringify_smart_pretty_as(10, 2, |s| {
+        s.object_begin()?;
+        s.member("a")?; s.array_begin()?;  s.array_end()?;
+        s.member("b")?; s.object_begin()?; s.object_end()?;
+        s.object_end()
+    }).unwrap();
+    assert_eq!(json, "{\n  \"a\": [],\n  \"b\": {}\n}");
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_scalar_root() {
+    assert_eq!(nanojson::stringify_smart_pretty(&42i64, 40, 2).unwrap(), "42");
+    assert_eq!(nanojson::stringify_smart_pretty(&"hello", 40, 2).unwrap(), "\"hello\"");
+    assert_eq!(nanojson::stringify_smart_pretty(&true, 40, 2).unwrap(), "true");
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_string_with_special_chars() {
+    // Strings containing `,` `:` `{` `}` must not confuse the scanner.
+    let json = nanojson::stringify_smart_pretty_as(80, 2, |s| {
+        s.object_begin()?;
+        s.member("k")?; s.string("a,b:c{d}[e]")?;
+        s.object_end()
+    }).unwrap();
+    // compact: {"k":"a,b:c{d}[e]"} = 20 bytes ≤ 80 → inline with spacing
+    assert_eq!(json, "{\"k\": \"a,b:c{d}[e]\"}");
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_line_width_zero_expands_all() {
+    // line_width=0: every non-empty container exceeds limit → all expand
+    let json = nanojson::stringify_smart_pretty(&[1i64, 2], 0, 2).unwrap();
+    assert_eq!(json, "[\n  1,\n  2\n]");
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_smart_pretty_motivating_example() {
+    // Demonstrate the doc-example: outer object expands, short inner array stays compact.
+    let json = nanojson::stringify_smart_pretty_as(20, 2, |s| {
+        s.object_begin()?;
+        s.member("x")?; s.integer(1)?;
+        s.member("ys")?;
+        s.array_begin()?;
+        s.integer(10)?; s.integer(20)?; s.integer(30)?;
+        s.array_end()?;
+        s.object_end()
+    }).unwrap();
+    // {"x":1,"ys":[10,20,30]} = 22 bytes > 20 → outer expands
+    // [10,20,30] = 10 bytes ≤ 20 → inner stays inline
+    assert_eq!(json, "{\n  \"x\": 1,\n  \"ys\": [10, 20, 30]\n}");
+}

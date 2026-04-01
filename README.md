@@ -190,6 +190,8 @@ Pass an indent width to the `_pretty` variants of any serialization function:
 // std tier
 let json = nanojson::stringify_pretty(2, &entity)?;
 let json = nanojson::stringify_pretty_as(2, |s| { ... })?;
+let json = nanojson::stringify_smart_pretty(80, 2, &entity)?;
+let json = nanojson::stringify_smart_pretty_as(80, 2, |s| { ... })?;
 
 // no_std tier
 let mut buf = [0; 256];

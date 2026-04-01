@@ -415,7 +415,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
 
     /// Like `member` but decodes the key into `self.str_buf`, supporting
     /// escape sequences. Used internally by map deserializers.
-    fn member_decoded(&mut self) -> Result<Option<&str>, ParseError> {
+    pub fn member_decoded(&mut self) -> Result<Option<&str>, ParseError> {
         if !self.object_next_member()? { return Ok(None) };
         self.get_token::<true>()?;
         self.expect_token(Token::String)?;
