@@ -83,6 +83,20 @@ impl<E: std::error::Error + 'static> std::error::Error for SerializeError<E> {
 }
 
 
+// Serialize an unsigned integer to decimal without allocating.
+// BUF_SIZE must be large enough for the type's maximum decimal digits (u64→20, u128→39).
+macro_rules! write_uint_raw {
+    ($self:expr, $x:expr, $t:ty, $buf_size:literal) => {{
+        let x: $t = $x;
+        if x == 0 { return $self.write(b"0"); }
+        let mut buf = [0u8; $buf_size];
+        let mut i = $buf_size;
+        let mut n = x;
+        while n > 0 { i -= 1; buf[i] = b'0' + (n % 10) as u8; n /= 10; }
+        $self.write(&buf[i..])
+    }};
+}
+
 impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
     pub fn new(writer: W) -> Self {
         Self {
@@ -182,60 +196,21 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
     }
 
     fn write_integer_raw(&mut self, x: i64) -> Result<(), SerializeError<W::Error>> {
-        if x < 0 {
-            self.write(b"-")?;
-            // Avoid overflow for i64::MIN: negate as u64
-            let u = if x == i64::MIN {
-                (i64::MAX as u64) + 1
-            } else {
-                (-x) as u64
-            };
-            return self.write_u64_raw(u);
-        }
-        self.write_u64_raw(x as u64)
+        if x < 0 { self.write(b"-")?; }
+        self.write_u64_raw(x.unsigned_abs())
     }
 
     fn write_u64_raw(&mut self, x: u64) -> Result<(), SerializeError<W::Error>> {
-        if x == 0 {
-            return self.write(b"0");
-        }
-        let mut buf = [0u8; 20];
-        let mut i = 20usize;
-        let mut n = x;
-        while n > 0 {
-            i -= 1;
-            buf[i] = b'0' + (n % 10) as u8;
-            n /= 10;
-        }
-        self.write(&buf[i..])
+        write_uint_raw!(self, x, u64, 20)
     }
 
     fn write_u128_raw(&mut self, x: u128) -> Result<(), SerializeError<W::Error>> {
-        if x == 0 {
-            return self.write(b"0");
-        }
-        let mut buf = [0u8; 39]; // u128::MAX has 39 decimal digits
-        let mut i = 39usize;
-        let mut n = x;
-        while n > 0 {
-            i -= 1;
-            buf[i] = b'0' + (n % 10) as u8;
-            n /= 10;
-        }
-        self.write(&buf[i..])
+        write_uint_raw!(self, x, u128, 39)
     }
 
     fn write_i128_raw(&mut self, x: i128) -> Result<(), SerializeError<W::Error>> {
-        if x < 0 {
-            self.write(b"-")?;
-            let u = if x == i128::MIN {
-                (i128::MAX as u128) + 1
-            } else {
-                (-x) as u128
-            };
-            return self.write_u128_raw(u);
-        }
-        self.write_u128_raw(x as u128)
+        if x < 0 { self.write(b"-")?; }
+        self.write_u128_raw(x.unsigned_abs())
     }
 
     fn write_string_escaped(&mut self, bytes: &[u8]) -> Result<(), SerializeError<W::Error>> {
@@ -823,6 +798,19 @@ pub fn stringify_pretty_as(
 
 // ---- Smart pretty-print ----
 
+// Apply smart formatting to compact JSON bytes; returns the formatted output.
+#[cfg(feature = "std")]
+fn apply_smart_format(
+    compact: std::vec::Vec<u8>,
+    line_width: usize,
+    indent: usize,
+) -> std::vec::Vec<u8> {
+    if compact.is_empty() { return compact };
+    let mut out = std::vec::Vec::with_capacity(compact.len() * 2);
+    smart_format(&compact, &mut 0, &mut out, line_width, indent, 0);
+    out
+}
+
 /// Advance `pos` from the opening `"` past the closing `"`, handling `\"` escapes.
 #[cfg(feature = "std")]
 fn skip_string_end(input: &[u8], pos: &mut usize) {
@@ -898,14 +886,6 @@ fn spaced_len(input: &[u8], start: usize, end: usize) -> usize {
     len
 }
 
-/// Copy one scalar token (string, number, bool, null) from `input[*pos..]` into `out`.
-#[cfg(feature = "std")]
-fn copy_scalar(input: &[u8], pos: &mut usize, out: &mut std::vec::Vec<u8>) {
-    let end = find_value_end(input, *pos);
-    out.extend_from_slice(&input[*pos..end]);
-    *pos = end;
-}
-
 /// Copy a compact container `input[start..end]` to `out`, inserting a space after
 /// each `:` and `,` that is not inside a string.
 #[cfg(feature = "std")]
@@ -936,6 +916,19 @@ fn copy_with_spacing(input: &[u8], start: usize, end: usize, out: &mut std::vec:
 fn write_indent(out: &mut std::vec::Vec<u8>, depth: usize, indent: usize) {
     let n = depth * indent;
     out.resize(out.len() + n, b' ');
+}
+
+/// Measure the display width and inlineability of the JSON value at `input[scan]`.
+/// Returns `(display_len, is_inline)`:
+///   - `display_len`: rendered byte width if kept on one line (0 if not inline)
+///   - `is_inline`: true if the value fits in `line_width` or is a scalar
+#[cfg(feature = "std")]
+fn measure_value(input: &[u8], scan: usize, line_width: usize) -> (usize, bool) {
+    let val_end = find_value_end(input, scan);
+    let is_container = matches!(input[scan], b'{' | b'[');
+    let inline = !is_container || val_end - scan <= line_width;
+    let display = if inline { spaced_len(input, scan, val_end) } else { 0 };
+    (display, inline)
 }
 
 /// Expand the object or array at `input[*pos]` into multi-line form with flow packing.
@@ -984,18 +977,10 @@ fn format_expanded(
                 skip_string_end(input, &mut scan); // past key
                 let key_display = spaced_len(input, key_start, scan);
                 scan += 1; // past ':'
-                let val_end = find_value_end(input, scan);
-                // Scalars are always inlined; only containers can be expanded.
-                let val_is_container = matches!(input[scan], b'{' | b'[');
-                let val_inline = !val_is_container || val_end - scan <= line_width;
-                let val_display = if val_inline { spaced_len(input, scan, val_end) } else { 0 };
+                let (val_display, val_inline) = measure_value(input, scan, line_width);
                 (key_display + 2 + val_display, val_inline) // +2 for ": "
             } else {
-                let val_end = find_value_end(input, scan);
-                let val_is_container = matches!(input[scan], b'{' | b'[');
-                let val_inline = !val_is_container || val_end - scan <= line_width;
-                let val_display = if val_inline { spaced_len(input, scan, val_end) } else { 0 };
-                (val_display, val_inline)
+                measure_value(input, scan, line_width)
             }
         };
 
@@ -1066,7 +1051,11 @@ fn smart_format(
                 format_expanded(input, pos, out, line_width, indent, depth);
             }
         }
-        _ => copy_scalar(input, pos, out),
+        _ => {
+            let end = find_value_end(input, *pos);
+            out.extend_from_slice(&input[*pos..end]);
+            *pos = end;
+        }
     }
 }
 
@@ -1098,17 +1087,7 @@ pub fn stringify_smart_pretty_as(
     indent: usize,
     f: impl FnOnce(&mut Serializer<std::vec::Vec<u8>>) -> Result<(), SerializeError<core::convert::Infallible>>,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
-    let mut ser: Serializer<_> = Serializer::new(std::vec::Vec::new());
-    f(&mut ser)?;
-    let compact = ser.into_writer();
-    if compact.is_empty() {
-        return Ok(std::string::String::new());
-    }
-    let mut out = std::vec::Vec::with_capacity(compact.len() * 2);
-    let mut pos = 0usize;
-    smart_format(&compact, &mut pos, &mut out, line_width, indent, 0);
-    std::string::String::from_utf8(out)
-        .map_err(|e| SerializeError::InvalidUtf8(e.utf8_error().error_len().unwrap_or(0)))
+    vec_to_string(apply_smart_format(serialize_to_vec(0, f)?, line_width, indent))
 }
 
 /// Serialize a value into a smart-pretty-printed heap-allocated [`String`].
@@ -1130,6 +1109,62 @@ pub fn stringify_smart_pretty<T: Serialize>(
     indent: usize,
 ) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
     stringify_smart_pretty_as(line_width, indent, |s| val.serialize(s))
+}
+
+/// An imperative-style smart compact pretty-printer.
+///
+/// Equivalent to [`stringify_smart_pretty_as`] but without the closure — useful when
+/// the JSON structure is not known until runtime or when you prefer to call serializer
+/// methods directly rather than through a closure.
+///
+/// Internally serializes to compact JSON, then smart-formats the result on [`finish`].
+/// All [`Serializer`] methods are available via [`Deref`] / [`DerefMut`].
+///
+/// # Example
+/// ```
+/// use nanojson::SmartSerializer;
+///
+/// let mut ser = SmartSerializer::with_compact(40, 2);
+/// ser.array_begin()?;
+/// for i in 1i64..=3 { ser.integer(i)?; }
+/// ser.array_end()?;
+/// let json = ser.finish()?;
+/// assert_eq!(json, "[1, 2, 3]");
+/// # Ok::<(), nanojson::SerializeError<core::convert::Infallible>>(())
+/// ```
+///
+/// [`finish`]: SmartSerializer::finish
+/// [`Deref`]: core::ops::Deref
+/// [`DerefMut`]: core::ops::DerefMut
+#[cfg(feature = "std")]
+pub struct SmartSerializer {
+    inner: Serializer<std::vec::Vec<u8>>,
+    line_width: usize,
+    indent: usize,
+}
+
+#[cfg(feature = "std")]
+impl SmartSerializer {
+    /// Create a new smart compact pretty-printer with the given `line_width` and `indent`.
+    pub fn with_compact(line_width: usize, indent: usize) -> Self {
+        Self { inner: Serializer::new(std::vec::Vec::new()), line_width, indent }
+    }
+
+    /// Finish serialization, smart-format the output, and return the resulting [`String`].
+    pub fn finish(self) -> Result<std::string::String, SerializeError<core::convert::Infallible>> {
+        vec_to_string(apply_smart_format(self.inner.into_writer(), self.line_width, self.indent))
+    }
+}
+
+#[cfg(feature = "std")]
+impl core::ops::Deref for SmartSerializer {
+    type Target = Serializer<std::vec::Vec<u8>>;
+    fn deref(&self) -> &Self::Target { &self.inner }
+}
+
+#[cfg(feature = "std")]
+impl core::ops::DerefMut for SmartSerializer {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.inner }
 }
 
 #[cfg(feature = "std")]
