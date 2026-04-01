@@ -82,21 +82,6 @@ impl<E: std::error::Error + 'static> std::error::Error for SerializeError<E> {
     }
 }
 
-
-// Serialize an unsigned integer to decimal without allocating.
-// BUF_SIZE must be large enough for the type's maximum decimal digits (u64→20, u128→39).
-macro_rules! write_uint_raw {
-    ($self:expr, $x:expr, $t:ty, $buf_size:literal) => {{
-        let x: $t = $x;
-        if x == 0 { return $self.write(b"0"); }
-        let mut buf = [0u8; $buf_size];
-        let mut i = $buf_size;
-        let mut n = x;
-        while n > 0 { i -= 1; buf[i] = b'0' + (n % 10) as u8; n /= 10; }
-        $self.write(&buf[i..])
-    }};
-}
-
 impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
     pub fn new(writer: W) -> Self {
         Self {
@@ -195,22 +180,24 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
         self.write(close)
     }
 
-    fn write_integer_raw(&mut self, x: i64) -> Result<(), SerializeError<W::Error>> {
-        if x < 0 { self.write(b"-")?; }
-        self.write_u64_raw(x.unsigned_abs())
-    }
-
-    fn write_u64_raw(&mut self, x: u64) -> Result<(), SerializeError<W::Error>> {
-        write_uint_raw!(self, x, u64, 20)
-    }
-
-    fn write_u128_raw(&mut self, x: u128) -> Result<(), SerializeError<W::Error>> {
-        write_uint_raw!(self, x, u128, 39)
-    }
-
-    fn write_i128_raw(&mut self, x: i128) -> Result<(), SerializeError<W::Error>> {
-        if x < 0 { self.write(b"-")?; }
-        self.write_u128_raw(x.unsigned_abs())
+    /// Format any Display value into a 40-byte stack buffer and write the bytes.
+    /// 40 bytes covers i128::MIN ("-170141183460469231731687303715884105728").
+    fn write_display<T: core::fmt::Display>(&mut self, val: T) -> Result<(), SerializeError<W::Error>> {
+        let mut buf = [0u8; 40];
+        let mut pos = 0usize;
+        struct Buf<'a>(&'a mut [u8], &'a mut usize);
+        impl core::fmt::Write for Buf<'_> {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                let b = s.as_bytes();
+                let end = *self.1 + b.len();
+                if end > self.0.len() { return Err(core::fmt::Error); }
+                self.0[*self.1..end].copy_from_slice(b);
+                *self.1 = end;
+                Ok(())
+            }
+        }
+        let _ = core::fmt::write(&mut Buf(&mut buf, &mut pos), format_args!("{val}"));
+        self.write(&buf[..pos])
     }
 
     fn write_string_escaped(&mut self, bytes: &[u8]) -> Result<(), SerializeError<W::Error>> {
@@ -289,7 +276,7 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
 
     pub fn integer(&mut self, v: i64) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
-        self.write_integer_raw(v)?;
+        self.write_display(v)?;
         self.element_end();
         Ok(())
     }
@@ -298,44 +285,29 @@ impl<W: Write, const DEPTH: usize> Serializer<W, DEPTH> {
         if !v.is_finite() {
             return Err(SerializeError::InvalidValue("float must be finite (not NaN or Infinity)"));
         }
-        // Format into a 32-byte stack buffer via core::fmt::Write — no alloc needed.
-        let mut buf = [0u8; 32];
-        let mut pos = 0usize;
-        struct FloatBuf<'a>(&'a mut [u8], &'a mut usize);
-        impl core::fmt::Write for FloatBuf<'_> {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                let b = s.as_bytes();
-                let end = *self.1 + b.len();
-                if end > self.0.len() { return Err(core::fmt::Error); }
-                self.0[*self.1..end].copy_from_slice(b);
-                *self.1 = end;
-                Ok(())
-            }
-        }
-        let _ = core::fmt::write(&mut FloatBuf(&mut buf, &mut pos), format_args!("{v}"));
         self.element_begin()?;
-        self.number_raw(&buf[..pos])?;
+        self.write_display(v)?;
         self.element_end();
         Ok(())
     }
 
     pub fn unsigned(&mut self, v: u64) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
-        self.write_u64_raw(v)?;
+        self.write_display(v)?;
         self.element_end();
         Ok(())
     }
 
     pub fn integer128(&mut self, v: i128) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
-        self.write_i128_raw(v)?;
+        self.write_display(v)?;
         self.element_end();
         Ok(())
     }
 
     pub fn unsigned128(&mut self, v: u128) -> Result<(), SerializeError<W::Error>> {
         self.element_begin()?;
-        self.write_u128_raw(v)?;
+        self.write_display(v)?;
         self.element_end();
         Ok(())
     }
@@ -437,38 +409,22 @@ impl Serialize for bool {
     }
 }
 
-macro_rules! impl_integer {
-    ($($t:ty),*) => {$(
+// impl Serialize for all numeric primitives via their respective Serializer methods.
+// u64/usize use unsigned() to avoid silent truncation of values > i64::MAX.
+macro_rules! impl_serialize_num {
+    ($method:ident as $cast:ty => $($t:ty),*) => {$(
         impl Serialize for $t {
             fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-                ser.integer(*self as i64)
+                ser.$method(*self as $cast)
             }
         }
     )*};
 }
-impl_integer!(i8, i16, i32, i64, u8, u16, u32, isize);
-
-// u64 and usize need unsigned() to avoid silent truncation of values > i64::MAX.
-impl Serialize for u64 {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.unsigned(*self)
-    }
-}
-impl Serialize for usize {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.unsigned(*self as u64)
-    }
-}
-impl Serialize for i128 {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.integer128(*self)
-    }
-}
-impl Serialize for u128 {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.unsigned128(*self)
-    }
-}
+impl_serialize_num!(integer    as i64  => i8, i16, i32, i64, u8, u16, u32, isize);
+impl_serialize_num!(unsigned   as u64  => u64, usize);
+impl_serialize_num!(integer128 as i128 => i128);
+impl_serialize_num!(unsigned128 as u128 => u128);
+impl_serialize_num!(float      as f64  => f32, f64);
 
 impl Serialize for str {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
@@ -511,18 +467,6 @@ impl<T: Serialize> Serialize for [T] {
 impl<T: Serialize, const N: usize> Serialize for [T; N] {
     fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
         self.as_slice().serialize(ser)
-    }
-}
-
-impl Serialize for f32 {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.float(*self as f64)
-    }
-}
-
-impl Serialize for f64 {
-    fn serialize<W: Write>(&self, ser: &mut Serializer<W>) -> Result<(), SerializeError<W::Error>> {
-        ser.float(*self as f64)
     }
 }
 
