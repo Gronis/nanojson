@@ -106,9 +106,7 @@ impl<'src, 'buf> Parser<'src, 'buf> {
 
     /// Byte offset of the start of the most recently attempted token.
     /// Use this in your own diagnostics to compute line/column.
-    pub fn error_offset(&self) -> usize {
-        self.token_start
-    }
+    pub fn error_offset(&self) -> usize { self.token_start }
 
     // ---- tokenizer ----
 
@@ -432,13 +430,19 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// Returns an `UnknownField` error at the current position.
     /// Call this inside the `_` arm of your `member` match.
     pub fn unknown_field(&self) -> ParseError {
-        ParseError::at(self.key_start, ParseErrorKind::UnknownField { type_name: "", expected_fields: &[] })
+        ParseError::at(self.key_start, ParseErrorKind::UnknownField {
+            type_name: "", expected_fields: &[]
+        })
     }
 
     /// Returns an `UnknownField` error enriched with the type name and its valid field names.
     /// Used by derive-generated code to produce more helpful diagnostics.
-    pub fn unknown_field_in(&self, type_name: &'static str, expected_fields: &'static [&'static str]) -> ParseError {
-        ParseError::at(self.key_start, ParseErrorKind::UnknownField { type_name, expected_fields })
+    pub fn unknown_field_in(
+        &self, type_name: &'static str, expected_fields: &'static [&'static str]
+    ) -> ParseError {
+        ParseError::at(self.key_start, ParseErrorKind::UnknownField {
+            type_name, expected_fields
+        })
     }
 
     /// Parse `[`.
@@ -485,7 +489,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
             Token::False => Ok(false),
             _ => Err(ParseError::at(
                 self.token_start,
-                ParseErrorKind::UnexpectedToken { expected: "boolean", got: self.token.name() },
+                ParseErrorKind::UnexpectedToken {
+                    expected: "boolean", got: self.token.name()
+                },
             )),
         }
     }
@@ -520,7 +526,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         let offset = self.error_offset();
         s.parse::<Num>().map_err(|_| ParseError::at(
             offset,
-            ParseErrorKind::UnexpectedToken { expected: "number", got: "invalid float" },
+            ParseErrorKind::UnexpectedToken {
+                expected: "number", got: "invalid float"
+            },
         ))
     }
 
@@ -531,7 +539,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         let offset = self.error_offset();
         s.parse::<Num>().map_err(|_| ParseError::at(
             offset,
-            ParseErrorKind::UnexpectedToken { expected: "number", got: "int out of range" },
+            ParseErrorKind::UnexpectedToken {
+                expected: "number", got: "int out of range"
+            },
         ))
     }
 

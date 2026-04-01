@@ -1664,3 +1664,25 @@ fn test_smart_pretty_motivating_example() {
     // [10,20,30] = 10 bytes ≤ 20 → inner stays inline
     assert_eq!(json, "{\n  \"x\": 1,\n  \"ys\": [10, 20, 30]\n}");
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn outputs_invalid_utf8_for_malformed_sequence() {
+    // 0xE2 starts a 3-byte sequence, but 0x28 ('(') is not a continuation byte.
+    // 0xA1 is a lone continuation byte.  Both non-ASCII bytes must be \uXXXX-escaped.
+    let input = [0xE2u8, 0x28, 0xA1];
+
+    let json = nanojson::stringify_as(|s| s.string_bytes(&input)).unwrap();
+    let ans = r#""\u00e2(\u00a1""#;
+    assert_eq!(json, ans);
+    assert!(std::str::from_utf8(json.as_bytes()).is_ok(),
+        "Output is not valid UTF-8: {:?}", json);
+}
+
+#[test]
+fn escapes_vertical_tab_as_unicode() {
+    // \v (0x0B) is not a valid JSON escape; must be emitted as \u000b.
+    let mut out = [0u8; 16];
+    let json = nanojson::stringify_sized_as(&mut out, |s| s.string_bytes(&[0x0B])).unwrap();
+    assert_eq!(&json[..], r#""\u000b""#);
+}

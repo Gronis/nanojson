@@ -14,23 +14,13 @@ pub struct SliceWriter<'a> {
 }
 
 impl<'a> SliceWriter<'a> {
-    pub fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, pos: 0 }
-    }
-
+    pub fn new(buf: &'a mut [u8]) -> Self { Self { buf, pos: 0 } }
     /// Returns the bytes written so far.
-    pub fn written(&self) -> &[u8] {
-        &self.buf[..self.pos]
-    }
-
-    pub fn pos(&self) -> usize {
-        self.pos
-    }
-
+    pub fn written(&self) -> &[u8] { &self.buf[..self.pos] }
+    /// Returns the current write position.
+    pub fn pos(&self) -> usize { self.pos }
     /// Reset the write position to 0.
-    pub fn reset(&mut self) {
-        self.pos = 0;
-    }
+    pub fn reset(&mut self) { self.pos = 0 }
 }
 
 impl Write for SliceWriter<'_> {
@@ -38,9 +28,7 @@ impl Write for SliceWriter<'_> {
 
     fn write_bytes(&mut self, b: &[u8]) -> Result<(), WriteError> {
         let end = self.pos + b.len();
-        if end > self.buf.len() {
-            return Err(WriteError::BufferFull);
-        }
+        if end > self.buf.len() { return Err(WriteError::BufferFull) };
         self.buf[self.pos..end].copy_from_slice(b);
         self.pos = end;
         Ok(())
@@ -59,9 +47,7 @@ pub struct SizeCounter {
 }
 
 impl SizeCounter {
-    pub fn new() -> Self {
-        Self { count: 0 }
-    }
+    pub fn new() -> Self { Self { count: 0 } }
 }
 
 impl<W: Write> Write for &mut W {
