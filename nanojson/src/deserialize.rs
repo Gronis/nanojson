@@ -508,9 +508,10 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         self.current_string()
     }
 
-    /// Parse a JSON number and return the raw source bytes as a `&'src str`.
-    /// No numeric conversion is performed. Parse the value yourself with
-    /// e.g. `s.parse::<f64>()` (requires std) or a dedicated crate.
+    /// Parse a JSON number and return the raw source bytes as a `&'src str`. No
+    /// numeric conversion is performed. Parse the value yourself with e.g.
+    /// `s.parse::<f64>()` or a dedicated crate, or use `.float()` to parse
+    /// using FromStr::parse
     pub fn number_str(&mut self) -> Result<&'src str, ParseError> {
         self.get_and_expect(Token::Number)?;
         let bytes = &self.src[self.number_start..self.number_end];
@@ -523,11 +524,11 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// (either `f32` or `f64`).
     pub fn float<Num: FromStr>(&mut self) -> Result<Num, ParseError> {
         let s = self.number_str()?;
-        let offset = self.error_offset();
+        let offset = self.token_start;
         s.parse::<Num>().map_err(|_| ParseError::at(
             offset,
             ParseErrorKind::UnexpectedToken {
-                expected: "number", got: "invalid float"
+                expected: "float", got: "invalid float"
             },
         ))
     }
@@ -536,11 +537,11 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// (either `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, or `u64`).
     pub fn integer<Num: FromStr>(&mut self) -> Result<Num, ParseError> {
         let s = self.number_str()?;
-        let offset = self.error_offset();
+        let offset = self.token_start;
         s.parse::<Num>().map_err(|_| ParseError::at(
             offset,
             ParseErrorKind::UnexpectedToken {
-                expected: "number", got: "int out of range"
+                expected: "integer", got: "int out of range"
             },
         ))
     }

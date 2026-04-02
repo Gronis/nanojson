@@ -15,13 +15,16 @@ struct MyStruct {
 
 fn main() {
     // Parse a JSON string into a struct
-    let json = r#"{"num": 42.3, "name": "hello"}"#;
+    let json = r#"{"num": 34.2, "name": "hello"}"#;
     let my_struct = nanojson::parse_sized::<MyStruct>(&mut [0; 256], json.as_bytes());
 
+    if let Err(e) = my_struct {
+        panic!("Failed to parse. Error:\n{}", e.display_with_source(json));
+    }
     if let Ok(my_struct) = my_struct {
         // Change the fields and turn back into a JSON string again
         let my_struct2 = MyStruct {
-            num: 420.3,
+            num: 420.5,
             name: StringArray::try_from("world").unwrap(),
         };
 
