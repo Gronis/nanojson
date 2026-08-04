@@ -471,7 +471,7 @@ fn test_parse_string_escapes() {
     assert_eq!(Parser::new(b"\"\\n\"", &mut [0u8; 8]).string().unwrap(), "\n");
     assert_eq!(Parser::new(b"\"\\r\"", &mut [0u8; 8]).string().unwrap(), "\r");
     assert_eq!(Parser::new(b"\"\\f\"", &mut [0u8; 8]).string().unwrap(), "\x0C");
-    assert_eq!(Parser::new(b"\"\\v\"", &mut [0u8; 8]).string().unwrap(), "\x0B");
+    assert!(Parser::new(b"\"\\v\"", &mut [0u8; 8]).string().is_err());
     assert_eq!(Parser::new(b"\"\\\\\"", &mut [0u8; 8]).string().unwrap(), "\\");
     assert_eq!(Parser::new(b"\"\\\"\"", &mut [0u8; 8]).string().unwrap(), "\"");
     assert_eq!(Parser::new(b"\"\\/\"", &mut [0u8; 8]).string().unwrap(), "/");

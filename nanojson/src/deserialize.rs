@@ -22,19 +22,19 @@ enum Token {
 impl Token {
     fn name(self) -> &'static str {
         match self {
-            Token::Invalid      => "invalid",
-            Token::Eof          => "end of input",
-            Token::OpenCurly    => "{",
-            Token::CloseCurly   => "}",
-            Token::OpenBracket  => "[",
+            Token::Invalid => "invalid",
+            Token::Eof => "end of input",
+            Token::OpenCurly => "{",
+            Token::CloseCurly => "}",
+            Token::OpenBracket => "[",
             Token::CloseBracket => "]",
-            Token::Comma        => ",",
-            Token::Colon        => ":",
-            Token::True         => "true",
-            Token::False        => "false",
-            Token::Null         => "null",
-            Token::String       => "string",
-            Token::Number       => "number",
+            Token::Comma => ",",
+            Token::Colon => ":",
+            Token::True => "true",
+            Token::False => "false",
+            Token::Null => "null",
+            Token::String => "string",
+            Token::Number => "number",
         }
     }
 }
@@ -106,7 +106,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
 
     /// Byte offset of the start of the most recently attempted token.
     /// Use this in your own diagnostics to compute line/column.
-    pub fn error_offset(&self) -> usize { self.token_start }
+    pub fn error_offset(&self) -> usize {
+        self.token_start
+    }
 
     // ---- tokenizer ----
 
@@ -151,9 +153,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
 
         // Keywords: true / false / null
         let keywords: [(&[u8], Token); 3] = [
-            (b"true",  Token::True),
+            (b"true", Token::True),
             (b"false", Token::False),
-            (b"null",  Token::Null),
+            (b"null", Token::Null),
         ];
         for (keyword, tok) in keywords {
             if self.src[self.pos..].starts_with(keyword) {
@@ -163,16 +165,51 @@ impl<'src, 'buf> Parser<'src, 'buf> {
             }
         }
 
-        // Number: optional '-', digits, optional '.digits', optional 'e/E±digits'
+        // Number: optional '-', integer, optional fraction, optional exponent.
         if ch == b'-' || ch.is_ascii_digit() {
             let start = self.pos;
             if ch == b'-' { self.pos += 1; }
-            while self.pos < self.src.len() && self.src[self.pos].is_ascii_digit() {
-                self.pos += 1;
+            match self.src.get(self.pos).copied() {
+                Some(b'0') => {
+                    self.pos += 1;
+                    if self.src.get(self.pos).is_some_and(u8::is_ascii_digit) {
+                        return Err(ParseError::at(
+                            start,
+                            ParseErrorKind::UnexpectedToken {
+                                expected: "valid number",
+                                got: "leading zero",
+                            },
+                        ));
+                    }
+                }
+                Some(b'1'..=b'9') => {
+                    self.pos += 1;
+                    while self.src.get(self.pos).is_some_and(u8::is_ascii_digit) {
+                        self.pos += 1;
+                    }
+                }
+                _ => {
+                    return Err(ParseError::at(
+                        start,
+                        ParseErrorKind::UnexpectedToken {
+                            expected: "digit",
+                            got: "invalid number",
+                        },
+                    ));
+                }
             }
             if self.pos < self.src.len() && self.src[self.pos] == b'.' {
                 self.pos += 1;
-                while self.pos < self.src.len() && self.src[self.pos].is_ascii_digit() {
+                if !self.src.get(self.pos).is_some_and(u8::is_ascii_digit) {
+                    return Err(ParseError::at(
+                        start,
+                        ParseErrorKind::UnexpectedToken {
+                            expected: "fraction digit",
+                            got: "invalid number",
+                        },
+                    ));
+                }
+                while self.src.get(self.pos).is_some_and(u8::is_ascii_digit) {
                     self.pos += 1;
                 }
             }
@@ -181,7 +218,16 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                 if self.pos < self.src.len() && matches!(self.src[self.pos], b'+' | b'-') {
                     self.pos += 1;
                 }
-                while self.pos < self.src.len() && self.src[self.pos].is_ascii_digit() {
+                if !self.src.get(self.pos).is_some_and(u8::is_ascii_digit) {
+                    return Err(ParseError::at(
+                        start,
+                        ParseErrorKind::UnexpectedToken {
+                            expected: "exponent digit",
+                            got: "invalid number",
+                        },
+                    ));
+                }
+                while self.src.get(self.pos).is_some_and(u8::is_ascii_digit) {
                     self.pos += 1;
                 }
             }
@@ -218,41 +264,52 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                         self.pos += 1;
                         if self.pos >= self.src.len() {
                             self.token = Token::Invalid;
-                            return Err(ParseError::at(
-                                self.pos,
-                                ParseErrorKind::UnexpectedEof,
-                            ));
+                            return Err(ParseError::at(self.pos, ParseErrorKind::UnexpectedEof));
                         }
                         let esc = self.src[self.pos];
                         self.pos += 1;
                         if esc == b'u' {
                             // \uXXXX — parse 4 hex digits then encode as UTF-8.
                             if self.pos + 4 > self.src.len() {
-                                return Err(ParseError::at(self.pos, ParseErrorKind::UnexpectedEof));
+                                return Err(ParseError::at(
+                                    self.pos,
+                                    ParseErrorKind::UnexpectedEof,
+                                ));
                             }
-                            let h = parse_hex4(&self.src[self.pos..])
-                                .ok_or_else(|| ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u')))?;
+                            let h = parse_hex4(&self.src[self.pos..]).ok_or_else(|| {
+                                ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u'))
+                            })?;
                             self.pos += 4;
 
                             let cp: u32 = if (0xD800..=0xDBFF).contains(&h) {
                                 // High surrogate — must be followed by \uDC00..=\uDFFF.
                                 if self.pos + 6 > self.src.len()
-                                    || self.src[self.pos]     != b'\\'
+                                    || self.src[self.pos] != b'\\'
                                     || self.src[self.pos + 1] != b'u'
                                 {
-                                    return Err(ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u')));
+                                    return Err(ParseError::at(
+                                        self.pos,
+                                        ParseErrorKind::InvalidEscape(b'u'),
+                                    ));
                                 }
                                 self.pos += 2;
-                                let low = parse_hex4(&self.src[self.pos..])
-                                    .ok_or_else(|| ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u')))?;
+                                let low = parse_hex4(&self.src[self.pos..]).ok_or_else(|| {
+                                    ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u'))
+                                })?;
                                 if !(0xDC00..=0xDFFF).contains(&low) {
-                                    return Err(ParseError::at(self.pos, ParseErrorKind::InvalidEscape(b'u')));
+                                    return Err(ParseError::at(
+                                        self.pos,
+                                        ParseErrorKind::InvalidEscape(b'u'),
+                                    ));
                                 }
                                 self.pos += 4;
                                 0x10000 + ((h as u32 - 0xD800) << 10) + (low as u32 - 0xDC00)
                             } else if (0xDC00..=0xDFFF).contains(&h) {
                                 // Lone low surrogate.
-                                return Err(ParseError::at(self.pos - 4, ParseErrorKind::InvalidEscape(b'u')));
+                                return Err(ParseError::at(
+                                    self.pos - 4,
+                                    ParseErrorKind::InvalidEscape(b'u'),
+                                ));
                             } else {
                                 h as u32
                             };
@@ -272,15 +329,14 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                             }
                         } else {
                             let decoded = match esc {
-                                b'"'  => b'"',
+                                b'"' => b'"',
                                 b'\\' => b'\\',
-                                b'/'  => b'/',
-                                b'b'  => b'\x08',
-                                b't'  => b'\t',
-                                b'n'  => b'\n',
-                                b'v'  => b'\x0B',
-                                b'f'  => b'\x0C',
-                                b'r'  => b'\r',
+                                b'/' => b'/',
+                                b'b' => b'\x08',
+                                b't' => b'\t',
+                                b'n' => b'\n',
+                                b'f' => b'\x0C',
+                                b'r' => b'\r',
                                 other => {
                                     self.token = Token::Invalid;
                                     return Err(ParseError::at(
@@ -300,6 +356,16 @@ impl<'src, 'buf> Parser<'src, 'buf> {
                             }
                             self.str_len += 1;
                         }
+                    }
+                    0x00..=0x1F => {
+                        self.token = Token::Invalid;
+                        return Err(ParseError::at(
+                            self.pos,
+                            ParseErrorKind::UnexpectedToken {
+                                expected: "escaped control character",
+                                got: "unescaped control character",
+                            },
+                        ));
                     }
                     _ => {
                         let b = self.src[self.pos];
@@ -323,7 +389,10 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         self.token = Token::Invalid;
         Err(ParseError::at(
             self.token_start,
-            ParseErrorKind::UnexpectedToken { expected: "value", got: "invalid character" },
+            ParseErrorKind::UnexpectedToken {
+                expected: "value",
+                got: "invalid character",
+            },
         ))
     }
 
@@ -346,13 +415,20 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         self.expect_token(expected)
     }
 
+    fn previous_non_whitespace(&self) -> Option<u8> {
+        self.src[..self.pos]
+            .iter()
+            .rev()
+            .copied()
+            .find(|byte| !matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
+    }
+
     /// After a successful String token, return the decoded bytes as a `&str`.
     /// The lifetime is tied to `&self` (and therefore the `'buf` scratch buffer).
     fn current_string(&self) -> Result<&str, ParseError> {
         let bytes = &self.str_buf[..self.str_len];
-        core::str::from_utf8(bytes).map_err(|_| {
-            ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8)
-        })
+        core::str::from_utf8(bytes)
+            .map_err(|_| ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8))
     }
 
     /// After a successful String token parsed with `get_token::<false>`, return
@@ -360,12 +436,14 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// the string contained any backslash escape sequences.
     fn current_string_src(&self) -> Result<&'src str, ParseError> {
         if self.str_has_escapes {
-            return Err(ParseError::at(self.token_start, ParseErrorKind::KeyHasEscapes));
+            return Err(ParseError::at(
+                self.token_start,
+                ParseErrorKind::KeyHasEscapes,
+            ));
         }
         let bytes = &self.src[self.str_start_in_src..self.str_end_in_src];
-        core::str::from_utf8(bytes).map_err(|_| {
-            ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8)
-        })
+        core::str::from_utf8(bytes)
+            .map_err(|_| ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8))
     }
 
     // ---- public API ----
@@ -386,15 +464,23 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         if self.pos >= self.src.len() {
             return Err(ParseError::at(self.pos, ParseErrorKind::UnexpectedEof));
         }
+        let first = self.previous_non_whitespace() == Some(b'{');
         match self.src[self.pos] {
             b'}' => Ok(false),
-            b',' => {
+            b',' if !first => {
                 self.token_start = self.pos;
                 self.token = Token::Comma;
                 self.pos += 1;
                 Ok(true)
             }
-            _ => Ok(true), // first member; bad chars caught by get_token + expect_token
+            _ if first => Ok(true),
+            _ => Err(ParseError::at(
+                self.pos,
+                ParseErrorKind::UnexpectedToken {
+                    expected: "`,` or `}`",
+                    got: self.peek_token().name(),
+                },
+            )),
         }
     }
 
@@ -404,7 +490,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// Plain (unescaped) keys are supported; keys containing backslash escapes
     /// return `Err(ParseErrorKind::KeyHasEscapes)`.
     pub fn member(&mut self) -> Result<Option<&'src str>, ParseError> {
-        if !self.object_next_member()? { return Ok(None) };
+        if !self.object_next_member()? {
+            return Ok(None);
+        };
         self.get_and_expect(Token::String)?;
         self.key_start = self.token_start;
         self.get_and_expect(Token::Colon)?;
@@ -414,7 +502,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// Like `member` but decodes the key into `self.str_buf`, supporting
     /// escape sequences. Used internally by map deserializers.
     pub fn member_decoded(&mut self) -> Result<Option<&str>, ParseError> {
-        if !self.object_next_member()? { return Ok(None) };
+        if !self.object_next_member()? {
+            return Ok(None);
+        };
         self.get_token::<true>()?;
         self.expect_token(Token::String)?;
         self.key_start = self.token_start;
@@ -430,19 +520,29 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     /// Returns an `UnknownField` error at the current position.
     /// Call this inside the `_` arm of your `member` match.
     pub fn unknown_field(&self) -> ParseError {
-        ParseError::at(self.key_start, ParseErrorKind::UnknownField {
-            type_name: "", expected_fields: &[]
-        })
+        ParseError::at(
+            self.key_start,
+            ParseErrorKind::UnknownField {
+                type_name: "",
+                expected_fields: &[],
+            },
+        )
     }
 
     /// Returns an `UnknownField` error enriched with the type name and its valid field names.
     /// Used by derive-generated code to produce more helpful diagnostics.
     pub fn unknown_field_in(
-        &self, type_name: &'static str, expected_fields: &'static [&'static str]
+        &self,
+        type_name: &'static str,
+        expected_fields: &'static [&'static str],
     ) -> ParseError {
-        ParseError::at(self.key_start, ParseErrorKind::UnknownField {
-            type_name, expected_fields
-        })
+        ParseError::at(
+            self.key_start,
+            ParseErrorKind::UnknownField {
+                type_name,
+                expected_fields,
+            },
+        )
     }
 
     /// Parse `[`.
@@ -456,18 +556,25 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     ///
     /// Uses fast first-character inspection so no scratch buffer is needed.
     pub fn array_item(&mut self) -> Result<bool, ParseError> {
+        self.skip_whitespace();
+        let first = self.previous_non_whitespace() == Some(b'[');
         match self.peek_token() {
-            Token::Comma => {
+            Token::Comma if !first => {
                 // Consume the comma
-                self.skip_whitespace();
                 self.token_start = self.pos;
                 self.pos += 1;
                 self.token = Token::Comma;
                 Ok(true)
             }
             Token::CloseBracket => Ok(false),
-            // First item, or EOF/invalid — let the item deserializer produce the error.
-            _ => Ok(true),
+            _ if first => Ok(true),
+            token => Err(ParseError::at(
+                self.pos,
+                ParseErrorKind::UnexpectedToken {
+                    expected: "`,` or `]`",
+                    got: token.name(),
+                },
+            )),
         }
     }
 
@@ -485,12 +592,13 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     pub fn boolean(&mut self) -> Result<bool, ParseError> {
         self.get_token::<false>()?;
         match self.token {
-            Token::True  => Ok(true),
+            Token::True => Ok(true),
             Token::False => Ok(false),
             _ => Err(ParseError::at(
                 self.token_start,
                 ParseErrorKind::UnexpectedToken {
-                    expected: "boolean", got: self.token.name()
+                    expected: "boolean",
+                    got: self.token.name(),
                 },
             )),
         }
@@ -515,9 +623,8 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     pub fn number_str(&mut self) -> Result<&'src str, ParseError> {
         self.get_and_expect(Token::Number)?;
         let bytes = &self.src[self.number_start..self.number_end];
-        core::str::from_utf8(bytes).map_err(|_| {
-            ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8)
-        })
+        core::str::from_utf8(bytes)
+            .map_err(|_| ParseError::at(self.token_start, ParseErrorKind::InvalidUtf8))
     }
 
     /// Parse a JSON number and return the raw source bytes as a float type
@@ -525,12 +632,15 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     pub fn float<Num: FromStr>(&mut self) -> Result<Num, ParseError> {
         let s = self.number_str()?;
         let offset = self.token_start;
-        s.parse::<Num>().map_err(|_| ParseError::at(
-            offset,
-            ParseErrorKind::UnexpectedToken {
-                expected: "float", got: "invalid float"
-            },
-        ))
+        s.parse::<Num>().map_err(|_| {
+            ParseError::at(
+                offset,
+                ParseErrorKind::UnexpectedToken {
+                    expected: "float",
+                    got: "invalid float",
+                },
+            )
+        })
     }
 
     /// Parse a JSON number and return the raw source bytes as an integer type
@@ -538,12 +648,15 @@ impl<'src, 'buf> Parser<'src, 'buf> {
     pub fn integer<Num: FromStr>(&mut self) -> Result<Num, ParseError> {
         let s = self.number_str()?;
         let offset = self.token_start;
-        s.parse::<Num>().map_err(|_| ParseError::at(
-            offset,
-            ParseErrorKind::UnexpectedToken {
-                expected: "integer", got: "int out of range"
-            },
-        ))
+        s.parse::<Num>().map_err(|_| {
+            ParseError::at(
+                offset,
+                ParseErrorKind::UnexpectedToken {
+                    expected: "integer",
+                    got: "int out of range",
+                },
+            )
+        })
     }
 
     // ---- lookahead ----
@@ -555,7 +668,9 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         while i < self.src.len() && matches!(self.src[i], b' ' | b'\t' | b'\n' | b'\r') {
             i += 1;
         }
-        if i >= self.src.len() { return Token::Eof; }
+        if i >= self.src.len() {
+            return Token::Eof;
+        }
         match self.src[i] {
             b'{' => Token::OpenCurly,
             b'}' => Token::CloseCurly,
@@ -572,12 +687,32 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         }
     }
 
-    pub fn is_null_ahead(&self) -> bool   { self.peek_token() == Token::Null }
-    pub fn is_bool_ahead(&self) -> bool   { matches!(self.peek_token(), Token::True | Token::False) }
-    pub fn is_number_ahead(&self) -> bool { self.peek_token() == Token::Number }
-    pub fn is_string_ahead(&self) -> bool { self.peek_token() == Token::String }
-    pub fn is_array_ahead(&self) -> bool  { self.peek_token() == Token::OpenBracket }
-    pub fn is_object_ahead(&self) -> bool { self.peek_token() == Token::OpenCurly }
+    pub fn is_null_ahead(&self) -> bool {
+        self.peek_token() == Token::Null
+    }
+    pub fn is_bool_ahead(&self) -> bool {
+        matches!(self.peek_token(), Token::True | Token::False)
+    }
+    pub fn is_number_ahead(&self) -> bool {
+        self.peek_token() == Token::Number
+    }
+    pub fn is_string_ahead(&self) -> bool {
+        self.peek_token() == Token::String
+    }
+    pub fn is_array_ahead(&self) -> bool {
+        self.peek_token() == Token::OpenBracket
+    }
+    pub fn is_object_ahead(&self) -> bool {
+        self.peek_token() == Token::OpenCurly
+    }
+
+    /// Require that only JSON whitespace remains after the parsed value.
+    ///
+    /// Complete-document helpers call this automatically. Direct `Parser`
+    /// users may omit it when intentionally parsing a sequence of values.
+    pub fn finish(&mut self) -> Result<(), ParseError> {
+        self.get_and_expect(Token::Eof)
+    }
 }
 
 /// Trait for types that can deserialize themselves from JSON using a [`Parser`].
@@ -658,7 +793,10 @@ where
             if !parser.array_item()? {
                 return Err(ParseError::at(
                     parser.error_offset(),
-                    ParseErrorKind::UnexpectedToken { expected: "array item", got: "]" },
+                    ParseErrorKind::UnexpectedToken {
+                        expected: "array item",
+                        got: "]",
+                    },
                 ));
             }
             arr[i] = Some(T::deserialize(parser)?);
@@ -668,7 +806,10 @@ where
         if parser.array_item()? {
             return Err(ParseError::at(
                 parser.error_offset(),
-                ParseErrorKind::UnexpectedToken { expected: "]", got: "array item" },
+                ParseErrorKind::UnexpectedToken {
+                    expected: "]",
+                    got: "array item",
+                },
             ));
         }
         parser.array_end()?;
@@ -690,10 +831,9 @@ where
         parser.array_begin()?;
         while parser.array_item()? {
             let v = T::deserialize(parser)?;
-            vec.try_push(v).map_err(|_| ParseError::at(
-                parser.error_offset(),
-                ParseErrorKind::StringBufferOverflow,
-            ))?;
+            vec.try_push(v).map_err(|_| {
+                ParseError::at(parser.error_offset(), ParseErrorKind::StringBufferOverflow)
+            })?;
         }
         parser.array_end()?;
         Ok(vec)
@@ -706,9 +846,8 @@ impl<'src, const N: usize> Deserialize<'src> for arrayvec::ArrayString<N> {
         let off = parser.error_offset();
         let s = parser.string()?;
         let off = off + s.as_bytes().len();
-        arrayvec::ArrayString::try_from(s).map_err(|_| ParseError::at(
-            off, ParseErrorKind::StringBufferOverflow,
-        ))
+        arrayvec::ArrayString::try_from(s)
+            .map_err(|_| ParseError::at(off, ParseErrorKind::StringBufferOverflow))
     }
 }
 
@@ -803,7 +942,9 @@ pub fn parse_sized_as<T>(
     f: impl for<'a, 'b> FnOnce(&mut Parser<'a, 'b>) -> Result<T, ParseError>,
 ) -> Result<T, ParseError> {
     let mut parser = Parser::new(src.as_ref(), buf);
-    f(&mut parser)
+    let value = f(&mut parser)?;
+    parser.finish()?;
+    Ok(value)
 }
 
 /// Deserialize a `T: Deserialize` value. `buf` is the scratch buffer used for
@@ -818,9 +959,12 @@ pub fn parse_sized_as<T>(
 #[inline]
 pub fn parse_sized<T: for<'s> Deserialize<'s>>(
     buf: &mut [u8],
-    src: impl AsRef<[u8]>
+    src: impl AsRef<[u8]>,
 ) -> Result<T, ParseError> {
-    T::deserialize(&mut Parser::new(src.as_ref(), buf))
+    let mut parser = Parser::new(src.as_ref(), buf);
+    let value = T::deserialize(&mut parser)?;
+    parser.finish()?;
+    Ok(value)
 }
 
 /// Deserialize a fully-owned type from raw bytes or `&str`.
@@ -837,12 +981,13 @@ pub fn parse_sized<T: for<'s> Deserialize<'s>>(
 /// ```
 #[cfg(feature = "std")]
 #[inline]
-pub fn parse<T: for<'s> Deserialize<'s>>(
-    src: impl AsRef<[u8]>,
-) -> Result<T, ParseError> {
+pub fn parse<T: for<'s> Deserialize<'s>>(src: impl AsRef<[u8]>) -> Result<T, ParseError> {
     let src = src.as_ref();
     let mut scratch = std::vec![0u8; src.len().max(1)];
-    T::deserialize(&mut Parser::new(src, &mut scratch))
+    let mut parser = Parser::new(src, &mut scratch);
+    let value = T::deserialize(&mut parser)?;
+    parser.finish()?;
+    Ok(value)
 }
 
 /// Drive the parser manually with an auto-sized heap-allocated scratch buffer.
@@ -875,7 +1020,9 @@ pub fn parse_as<T>(
     let src = src.as_ref();
     let mut scratch = std::vec![0u8; src.len().max(1)];
     let mut parser = Parser::new(src, &mut scratch);
-    f(&mut parser)
+    let value = f(&mut parser)?;
+    parser.finish()?;
+    Ok(value)
 }
 
 // ---- Unicode helpers (used by \uXXXX parsing in get_token) ----
@@ -883,7 +1030,9 @@ pub fn parse_as<T>(
 /// Parse exactly 4 hex digits from the start of `bytes`, returning the u16 value.
 /// Returns `None` if fewer than 4 bytes are present or any byte is not a hex digit.
 fn parse_hex4(bytes: &[u8]) -> Option<u16> {
-    if bytes.len() < 4 { return None; }
+    if bytes.len() < 4 {
+        return None;
+    }
     let mut n: u16 = 0;
     for &b in &bytes[..4] {
         let d: u16 = match b {
@@ -902,22 +1051,25 @@ fn parse_hex4(bytes: &[u8]) -> Option<u16> {
 fn encode_utf8_cp(cp: u32) -> ([u8; 4], usize) {
     match cp {
         0x00..=0x7F => ([cp as u8, 0, 0, 0], 1),
-        0x80..=0x7FF => ([
-            0xC0 | (cp >> 6) as u8,
-            0x80 | (cp & 0x3F) as u8,
-            0, 0,
-        ], 2),
-        0x800..=0xFFFF => ([
-            0xE0 | (cp >> 12) as u8,
-            0x80 | ((cp >> 6) & 0x3F) as u8,
-            0x80 | (cp & 0x3F) as u8,
-            0,
-        ], 3),
-        _ => ([  // 0x10000..=0x10FFFF
-            0xF0 | (cp >> 18) as u8,
-            0x80 | ((cp >> 12) & 0x3F) as u8,
-            0x80 | ((cp >> 6) & 0x3F) as u8,
-            0x80 | (cp & 0x3F) as u8,
-        ], 4),
+        0x80..=0x7FF => ([0xC0 | (cp >> 6) as u8, 0x80 | (cp & 0x3F) as u8, 0, 0], 2),
+        0x800..=0xFFFF => (
+            [
+                0xE0 | (cp >> 12) as u8,
+                0x80 | ((cp >> 6) & 0x3F) as u8,
+                0x80 | (cp & 0x3F) as u8,
+                0,
+            ],
+            3,
+        ),
+        _ => (
+            [
+                // 0x10000..=0x10FFFF
+                0xF0 | (cp >> 18) as u8,
+                0x80 | ((cp >> 12) & 0x3F) as u8,
+                0x80 | ((cp >> 6) & 0x3F) as u8,
+                0x80 | (cp & 0x3F) as u8,
+            ],
+            4,
+        ),
     }
 }
