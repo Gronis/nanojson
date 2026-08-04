@@ -28,6 +28,7 @@ pub enum ParseErrorKind {
         type_name: &'static str,
         expected_fields: &'static [&'static str],
     },
+    DuplicateField { field: &'static str },
     MissingField { field: &'static str },
     /// An object key contains backslash escape sequences; only plain (unescaped)
     /// keys are supported by `member`. Use `parser.string(buf)` to decode
@@ -210,6 +211,8 @@ impl core::fmt::Display for ParseErrorKind {
             }
             ParseErrorKind::MissingField { field } =>
                 write!(f, "missing required field `{field}`"),
+            ParseErrorKind::DuplicateField { field } =>
+                write!(f, "duplicate field `{field}`"),
             ParseErrorKind::KeyHasEscapes =>
                 f.write_str("object key contains escape sequences"),
         }

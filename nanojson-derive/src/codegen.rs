@@ -231,7 +231,11 @@ fn gen_deserialize_object_fields(
         let fname = &f.name;
         let jname = escape_rust_str(&f.json_name);
         code.push_str(&format!(
-            "{jname} => {{ {fname} = ::core::option::Option::Some(\
+            "{jname} => {{ \
+                if {fname}.is_some() {{ \
+                    return ::core::result::Result::Err(__json.duplicate_field({jname})); \
+                }} \
+                {fname} = ::core::option::Option::Some(\
                 ::nanojson::Deserialize::deserialize(__json)?\
             ); }}"
         ));

@@ -233,6 +233,7 @@ The `offset` is a byte position in the source slice.
 | `StringBufferOverflow` | Decoded string didn't fit in the scratch buffer |
 | `InvalidUtf8` | String content is not valid UTF-8 after unescaping |
 | `UnknownField { type_name, expected_fields }` | Key not recognised by the deserializer |
+| `DuplicateField { field }` | The same `field` appeared more than once in an object |
 | `MissingField { field }` | A required `field` was absent (used by derived code) |
 
 Parse error can be printed with a nice looking error message like so:

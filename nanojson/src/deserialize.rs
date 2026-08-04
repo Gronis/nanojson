@@ -643,6 +643,11 @@ impl<'src, 'buf> Parser<'src, 'buf> {
         })
     }
 
+    /// Returns a duplicate-field error at the current object key.
+    pub fn duplicate_field(&self, field: &'static str) -> ParseError {
+        ParseError::at(self.key_start, ParseErrorKind::DuplicateField { field })
+    }
+
     /// Parse a JSON number and return the raw source bytes as an integer type
     /// (either `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, or `u64`).
     pub fn integer<Num: FromStr>(&mut self) -> Result<Num, ParseError> {

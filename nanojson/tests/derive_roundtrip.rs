@@ -451,6 +451,18 @@ fn test_unknown_field_error() {
 }
 
 #[test]
+fn test_duplicate_field_error() {
+    let result: Result<Point, _> = nanojson::parse(r#"{"x":1,"x":2,"y":3}"#);
+    assert!(matches!(
+        result,
+        Err(nanojson::ParseError {
+            kind: nanojson::ParseErrorKind::DuplicateField { field: "x" },
+            ..
+        })
+    ));
+}
+
+#[test]
 fn test_unknown_field_error_carries_metadata() {
     let src = br#"{"x":1,"y":2,"z":3}"#;
     let mut buf = [0u8; 64];
