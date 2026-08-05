@@ -60,6 +60,25 @@ struct WithDefaults {
     active: bool,
 }
 
+fn is_zero(value: &i64) -> bool {
+    *value == 0
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct WithSkippedFields {
+    #[nanojson(default, skip_serializing_if = "Option::is_none")]
+    optional: Option<i64>,
+    required: i64,
+    #[nanojson(rename = "count", default, skip_serializing_if = "is_zero")]
+    quantity: i64,
+}
+
+#[derive(Serialize)]
+struct SkipSome {
+    #[nanojson(skip_serializing_if = "Option::is_some")]
+    value: Option<i64>,
+}
+
 // Unit enum — serialized as a JSON string.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 enum Direction {
@@ -85,6 +104,15 @@ enum Action {
     Quit,                          // unit variant with rename → "quit"
     Move { x: i64, y: i64 },      // struct variant → {"Move": {"x": …, "y": …}}
     Attack { damage: i64 },
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum ConditionalAction {
+    Update {
+        id: i64,
+        #[nanojson(default, skip_serializing_if = "Option::is_none")]
+        note: Option<i64>,
+    },
 }
 
 // Struct with a &str field — only Serialize is derived.
@@ -189,12 +217,55 @@ fn test_option_none_serialize() {
 }
 
 #[test]
+fn test_skip_serializing_if_omits_matching_fields() {
+    let value = WithSkippedFields { optional: None, required: 7, quantity: 0 };
+    assert_eq!(as_str(&serialize_val(&value)), r#"{"required":7}"#);
+}
+
+#[test]
+fn test_skip_serializing_if_keeps_non_matching_fields() {
+    let value = WithSkippedFields { optional: Some(3), required: 7, quantity: 2 };
+    assert_eq!(
+        as_str(&serialize_val(&value)),
+        r#"{"optional":3,"required":7,"count":2}"#,
+    );
+}
+
+#[test]
+fn test_skip_serializing_if_accepts_any_matching_predicate() {
+    assert_eq!(as_str(&serialize_val(&SkipSome { value: Some(3) })), r#"{}"#);
+    assert_eq!(as_str(&serialize_val(&SkipSome { value: None })), r#"{"value":null}"#);
+}
+
+#[test]
+fn test_skip_serializing_if_roundtrip_with_default() {
+    let value = WithSkippedFields { optional: None, required: 7, quantity: 0 };
+    assert_eq!(roundtrip(&value), value);
+}
+
+#[test]
 fn test_struct_variant_serialize() {
     let c = Shape::Circle { radius: 7 };
     assert_eq!(as_str(&serialize_val(&c)), r#"{"Circle":{"radius":7}}"#);
 
     let r = Shape::Rect { width: 10, height: 20 };
     assert_eq!(as_str(&serialize_val(&r)), r#"{"Rect":{"width":10,"height":20}}"#);
+}
+
+#[test]
+fn test_skip_serializing_if_on_named_enum_field() {
+    let without_note = ConditionalAction::Update { id: 4, note: None };
+    assert_eq!(
+        as_str(&serialize_val(&without_note)),
+        r#"{"Update":{"id":4}}"#,
+    );
+    assert_eq!(roundtrip(&without_note), without_note);
+
+    let with_note = ConditionalAction::Update { id: 4, note: Some(8) };
+    assert_eq!(
+        as_str(&serialize_val(&with_note)),
+        r#"{"Update":{"id":4,"note":8}}"#,
+    );
 }
 
 // ============================================================

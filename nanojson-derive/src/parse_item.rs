@@ -28,6 +28,8 @@ pub(crate) struct ParsedField {
     /// If `#[nanojson(default)]` is present, use `Default::default()` when the
     /// field is absent from JSON instead of returning `MissingField`.
     pub has_default: bool,
+    /// Callable used to decide whether this field should be omitted when serializing.
+    pub skip_serializing_if: Option<String>,
 }
 
 pub(crate) struct ParsedVariant {
@@ -163,11 +165,16 @@ impl Tokens {
 struct FieldAttrs {
     rename: Option<String>,
     has_default: bool,
+    skip_serializing_if: Option<String>,
 }
 
 /// Accumulates `#[nanojson(...)]` attributes from a field's attribute list.
 fn parse_attrs(attrs: &[TokenTree]) -> Result<FieldAttrs, TokenStream> {
-    let mut result = FieldAttrs { rename: None, has_default: false };
+    let mut result = FieldAttrs {
+        rename: None,
+        has_default: false,
+        skip_serializing_if: None,
+    };
     let mut i = 0;
     while i < attrs.len() {
         // Look for `# [ ... ]`
@@ -227,6 +234,26 @@ fn parse_nanojson_attr(ts: TokenStream, out: &mut FieldAttrs) -> Result<(), Toke
                         };
                         out.rename = Some(value);
                     }
+                    "skip_serializing_if" => {
+                        match inner.next() {
+                            Some(TokenTree::Punct(p)) if p.as_char() == '=' => {}
+                            Some(other) => return compiler_error!(other, "expected `=` after `skip_serializing_if`"),
+                            None => return compiler_error!("expected `=` after `skip_serializing_if`"),
+                        }
+                        let value = match inner.next() {
+                            Some(TokenTree::Literal(lit)) => {
+                                let s = lit.to_string();
+                                if s.starts_with('"') && s.ends_with('"') {
+                                    s[1..s.len()-1].to_string()
+                                } else {
+                                    return compiler_error!(lit, "expected string literal for `skip_serializing_if`");
+                                }
+                            }
+                            Some(other) => return compiler_error!(other, "expected string literal for `skip_serializing_if`"),
+                            None => return compiler_error!("expected string literal for `skip_serializing_if`"),
+                        };
+                        out.skip_serializing_if = Some(value);
+                    }
                     other => return compiler_error!(key, "unknown nanojson attribute `{other}`"),
                 }
                 // skip optional comma between attributes
@@ -284,12 +311,23 @@ fn parse_named_fields(group: Group) -> Result<Vec<ParsedField>, TokenStream> {
         // Type tokens (up to `,`)
         let ty = toks.collect_until_comma();
 
-        let (json_name, has_default) = match parse_attrs(&attrs) {
-            Ok(attrs) => (attrs.rename.unwrap_or(name_str.clone()), attrs.has_default),
+        let (json_name, has_default, skip_serializing_if) = match parse_attrs(&attrs) {
+            Ok(attrs) => (
+                attrs.rename.unwrap_or(name_str.clone()),
+                attrs.has_default,
+                attrs.skip_serializing_if,
+            ),
             Err(tt) => return Err(tt),
         };
 
-        fields.push(ParsedField { name: name_str, name_span, ty, json_name, has_default });
+        fields.push(ParsedField {
+            name: name_str,
+            name_span,
+            ty,
+            json_name,
+            has_default,
+            skip_serializing_if,
+        });
     }
 
     Ok(fields)

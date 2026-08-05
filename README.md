@@ -80,6 +80,23 @@ enum Event {
 }
 ```
 
+Fields can be conditionally omitted during serialization by naming any callable
+that accepts a reference to the field and returns `bool`:
+
+```rust
+#[derive(Serialize, Deserialize)]
+struct Settings {
+    name: String,
+    #[nanojson(default, skip_serializing_if = "Option::is_none")]
+    limit: Option<i64>,
+}
+```
+
+The predicate is emitted as a normal Rust call, so free functions and associated
+methods such as `Option::is_some` or `String::is_empty` work as well. The
+attribute only affects serialization; add `default` separately when an omitted
+field should use `Default::default()` during deserialization.
+
 ---
 
 ## Two API tiers

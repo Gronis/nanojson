@@ -86,10 +86,17 @@ fn gen_serialize_fields(fields: &[ParsedField], self_expr: &str) -> Result<Strin
     for f in fields {
         let fname = &f.name;
         let jname = escape_rust_str(&f.json_name);
-        stmts.push_str(&format!(
+        let serialize = format!(
             "__json.member({jname})?; \
              ::nanojson::Serialize::serialize(&{self_expr}.{fname}, __json)?;"
-        ));
+        );
+        if let Some(predicate) = &f.skip_serializing_if {
+            stmts.push_str(&format!(
+                "if !({predicate})(&{self_expr}.{fname}) {{ {serialize} }}"
+            ));
+        } else {
+            stmts.push_str(&serialize);
+        }
     }
     stmts.push_str("__json.object_end()?;");
     Ok(stmts)
@@ -129,10 +136,17 @@ fn gen_serialize_enum(variants: &[ParsedVariant]) -> Result<String, TokenStream>
                 for f in fields {
                     let fname = &f.name;
                     let fjname = escape_rust_str(&f.json_name);
-                    body.push_str(&format!(
+                    let serialize = format!(
                         "__json.member({fjname})?; \
                          ::nanojson::Serialize::serialize({fname}, __json)?;"
-                    ));
+                    );
+                    if let Some(predicate) = &f.skip_serializing_if {
+                        body.push_str(&format!(
+                            "if !({predicate})({fname}) {{ {serialize} }}"
+                        ));
+                    } else {
+                        body.push_str(&serialize);
+                    }
                 }
                 body.push_str("__json.object_end()?;");
                 body.push_str("__json.object_end()?;");
